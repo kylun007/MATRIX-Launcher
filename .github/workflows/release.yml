@@ -1,0 +1,59 @@
+name: Publish MATRIX Launcher release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify tag matches package version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($env:GITHUB_REF_NAME -ne "v$($pkg.version)") { throw "Tag $env:GITHUB_REF_NAME does not match package version $($pkg.version)" }
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - name: Build release artifacts
+        env:
+          MATRIX_PUBLIC_RELEASE: '1'
+          MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
+          MATRIX_UPDATE_SIGNING_KEY: ${{ secrets.MATRIX_UPDATE_SIGNING_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if (Test-Path release) { Remove-Item -LiteralPath release -Recurse -Force }
+          npm run dist:win
+      - name: Sign and validate update manifest
+        env:
+          MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
+          MATRIX_UPDATE_SIGNING_KEY: ${{ secrets.MATRIX_UPDATE_SIGNING_KEY }}
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release -Filter '*Setup*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer was not generated.' }
+          $metadata = if ($env:MATRIX_UPDATE_CHANNEL -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
+          if (-not (Test-Path "release/$metadata")) { throw "Missing updater metadata: $metadata" }
+          node scripts/sign-update-manifest.mjs "release/$metadata"
+          if (-not (Test-Path "release/$metadata.sig")) { throw 'Signed manifest was not generated.' }
+          if ((Get-Content "release/$metadata" -Raw) -notmatch 'sha512:') { throw 'Updater metadata has no SHA-512 hash.' }
+      - name: Publish validated artifacts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
+        run: |
+          $releaseArgs = @('release', 'create', $env:GITHUB_REF_NAME, '--verify-tag', '--title', $env:GITHUB_REF_NAME, '--generate-notes')
+          if ($env:MATRIX_UPDATE_CHANNEL -eq 'beta') { $releaseArgs += '--prerelease' }
+          $metadata = if ($env:MATRIX_UPDATE_CHANNEL -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
+          $assets = Get-ChildItem release -File | Where-Object { $_.Name -like '*Setup*.exe*' -or $_.Name -eq $metadata -or $_.Name -eq "$metadata.sig" } | ForEach-Object { $_.FullName }
+          if (-not $assets) { throw 'No release assets were generated.' }
+          $releaseArgs += $assets
+          gh @releaseArgs

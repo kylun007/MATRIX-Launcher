@@ -3,6 +3,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+release-secrets/
 .env
 *.log
 .smoke/

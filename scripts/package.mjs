@@ -1,9 +1,14 @@
 import { build } from 'electron-builder';
 import { readFile } from 'node:fs/promises';
 const config = JSON.parse(await readFile('config/distribution.json', 'utf8'));
-const signed = !!process.env.CSC_LINK || !!process.env.WIN_CSC_LINK || !!process.env.AZURE_TENANT_ID;
-if (config.updateUrl && (!signed || !config.publisherName)) throw new Error('Atualizações exigem build assinado e publisherName configurado.');
-if (process.env.MATRIX_PUBLIC_RELEASE === '1' && (!signed || !config.microsoftClientId)) throw new Error('Release pública exige assinatura e client ID Microsoft próprio.');
+const publicRelease = process.env.MATRIX_PUBLIC_RELEASE === '1';
+const channel = process.env.MATRIX_UPDATE_CHANNEL ?? 'stable';
+if (!['stable', 'beta'].includes(channel)) throw new Error('MATRIX_UPDATE_CHANNEL deve ser stable ou beta.');
+if (publicRelease && (!process.env.MATRIX_UPDATE_SIGNING_KEY || !config.updateManifestPublicKey || !config.microsoftClientId || !config.githubOwner || !config.githubRepo || !process.env.GH_TOKEN)) {
+  throw new Error('Release requer chave privada Ed25519 no secret MATRIX_UPDATE_SIGNING_KEY, chave pública no config/distribution.json, client ID, destino GitHub e GH_TOKEN.');
+}
+const publish = publicRelease ? [{ provider: 'github', owner: config.githubOwner, repo: config.githubRepo, channel: channel === 'stable' ? 'latest' : 'beta', releaseType: channel === 'stable' ? 'release' : 'prerelease' }] : undefined;
 await build({ win: process.argv.includes('--linux') ? undefined : ['nsis'], linux: process.argv.includes('--linux') ? ['AppImage'] : undefined,
-  config: { compression: process.argv.includes('--fast') ? 'store' : 'normal', win: { signtoolOptions: { publisherName: config.publisherName ? [config.publisherName] : ['MATRIX Community'] }, ...(signed ? { forceCodeSigning: true } : {}) },
-    ...(config.updateUrl ? { publish: [{ provider: 'generic', url: config.updateUrl }] } : {}) } });
+  publish: 'never',
+  config: { compression: process.argv.includes('--fast') ? 'store' : 'normal', win: { verifyUpdateCodeSignature: false, signExecutable: false },
+    ...(publish ? { publish } : {}) } });

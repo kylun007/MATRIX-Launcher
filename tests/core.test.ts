@@ -41,6 +41,13 @@ test('atomic store persists profiles and recovers a corrupt primary using backup
   addOffline(first.data, 'Player1'); first.data.settings.skinCamera.rotateSensitivity = 1.4; await first.save(); await first.save(); const next = new Store(file, root); await next.load(); assert.equal(next.data.accounts[0].name, 'Player1'); assert.equal(next.data.settings.skinCamera.rotateSensitivity, 1.4);
   await writeFile(file, '{broken'); const recovered = new Store(file, root); await recovered.load(); assert.equal(recovered.data.accounts[0].name, 'Player1');
 });
+test('settings schema v1 migrates to v2 and keeps an original backup', async t => {
+  const root = await temp(t); const file = join(root, 'settings.json'); const legacy = defaults(root) as any;
+  legacy.schemaVersion = 1; delete legacy.settings.updateChannel; addOffline(legacy, 'Player2'); await writeFile(file, JSON.stringify(legacy));
+  const store = new Store(file, root); await store.load();
+  assert.equal(store.data.schemaVersion, 2); assert.equal(store.data.settings.updateChannel, 'stable'); assert.equal(store.data.accounts[0].name, 'Player2');
+  assert.equal(JSON.parse(await readFile(`${file}.bak`, 'utf8')).schemaVersion, 1); assert.equal(JSON.parse(await readFile(file, 'utf8')).schemaVersion, 2);
+});
 test('downloads validate hash and reuse existing files without network', async t => {
   const root = await temp(t); const destination = join(root, 'file'); let count = 0; const content = 'verified file';
   const fetcher = (async () => { count++; return new Response(content); }) as typeof fetch;

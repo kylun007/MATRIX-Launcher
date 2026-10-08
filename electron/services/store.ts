@@ -5,7 +5,13 @@ import { storeSchema, nickname, type StoreData, type Account } from '../../share
 import { skinCameraSchema } from '../../shared/skin.ts';
 
 export function defaults(gameDirectory: string): StoreData {
-  return { schemaVersion: 1, accounts: [], instances: [], modFavorites: [], settings: { minMemory: 1024, maxMemory: 4096, width: 1280, height: 720, gameDirectory, javaPath: '', jvmArgs: [], concurrency: 4, serverHost: '', serverPort: 25565, serverOnlineMode: true, communityApi: '', discordUrl: '', theme: 'dark', checkUpdates: true, skinCamera: skinCameraSchema.parse(undefined) } };
+  return { schemaVersion: 2, accounts: [], instances: [], modFavorites: [], settings: { minMemory: 1024, maxMemory: 4096, width: 1280, height: 720, gameDirectory, javaPath: '', jvmArgs: [], concurrency: 4, serverHost: '', serverPort: 25565, serverOnlineMode: true, communityApi: '', discordUrl: '', theme: 'dark', checkUpdates: true, updateChannel: 'stable', updateCheckIntervalHours: 6, skinCamera: skinCameraSchema.parse(undefined) } };
+}
+export function migrateStore(value: unknown): StoreData {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Formato de configurações inválido');
+  const data = value as Record<string, unknown>;
+  if (data.schemaVersion === 1) return storeSchema.parse({ ...data, schemaVersion: 2, settings: { ...(data.settings as Record<string, unknown>), updateChannel: 'stable', updateCheckIntervalHours: 6 } });
+  return storeSchema.parse(value);
 }
 export function offlineIdentity(name: string): string {
   nickname.parse(name);
@@ -30,10 +36,14 @@ export class Store {
   private queue: Promise<void> = Promise.resolve();
   constructor(readonly file: string, gameDirectory: string) { this.data = defaults(gameDirectory); }
   async load(): Promise<void> {
-    try { this.data = storeSchema.parse(JSON.parse(await readFile(this.file, 'utf8'))); }
+    try {
+      const raw = JSON.parse(await readFile(this.file, 'utf8')) as { schemaVersion?: number };
+      this.data = migrateStore(raw);
+      if (raw.schemaVersion !== this.data.schemaVersion) await this.save();
+    }
     catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') { await this.save(); return; }
-      try { this.data = storeSchema.parse(JSON.parse(await readFile(`${this.file}.bak`, 'utf8'))); }
+      try { this.data = migrateStore(JSON.parse(await readFile(`${this.file}.bak`, 'utf8'))); }
       catch { throw new Error('Configuração corrompida. Preserve os arquivos settings.json e .bak antes de recuperar.'); }
     }
   }

@@ -82,12 +82,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "signtoolOptions": {
-        "publisherName": [
-          "MATRIX Community"
-        ]
-      },
-      "verifyUpdateCodeSignature": true
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,

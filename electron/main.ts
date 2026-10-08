@@ -49,6 +49,7 @@ let community: Community | undefined; let communityError: string | undefined; le
 let authCode: Snapshot['authCode']; let lastError: string | undefined; let lastEmit = 0; let pendingEmit: NodeJS.Timeout | undefined;
 let activeCommand: string | undefined;
 let javaState: JavaState = { status: 'unknown' }; let javaKey = '';
+let lastAutomaticUpdateCheck = 0;
 const rendererPath = join(__dirname, '../dist/index.html');
 const devUrl = !app.isPackaged && process.env.MATRIX_DEV_URL === 'http://127.0.0.1:5173' ? process.env.MATRIX_DEV_URL : undefined;
 function snapshot(): Snapshot { return { ...store.data, game: minecraft.game, java: javaState, operation, community, communityError, server, authCode, error: lastError, update: updates.state, appVersion: app.getVersion(), microsoftConfigured: !!distribution.microsoftClientId }; }
@@ -247,7 +248,7 @@ async function handle(command: Command, input: unknown): Promise<unknown> {
     case 'community.refresh': return refreshCommunity();
     case 'server.copy': { if (!store.data.settings.serverHost) throw new Error('Configure o servidor primeiro'); clipboard.writeText(`${store.data.settings.serverHost}:${store.data.settings.serverPort}`); return; }
     case 'link.open': {
-      const url = secureUrl(value as string); const allowed = [new URL(distribution.website).hostname, 'www.minecraft.net', 'www.microsoft.com', 'microsoft.com', 'discord.gg', 'discord.com', 'modrinth.com'];
+      const url = secureUrl(value as string); const allowed = [new URL(distribution.website).hostname, 'www.minecraft.net', 'www.microsoft.com', 'microsoft.com', 'discord.gg', 'discord.com', 'modrinth.com', 'github.com'];
       if (store.data.settings.discordUrl) allowed.push(new URL(store.data.settings.discordUrl).hostname);
       if (!allowed.includes(url.hostname)) throw new Error('Link externo não autorizado'); await shell.openExternal(url.href); return;
     }
@@ -262,9 +263,9 @@ async function handle(command: Command, input: unknown): Promise<unknown> {
       if (result.canceled || !result.filePath) return; await logs.flush();
       await writeFile(result.filePath, JSON.stringify({ app: app.getVersion(), os: process.platform, arch: process.arch, electron: process.versions.electron, game: minecraft.game, operation, error: lastError, accounts: store.data.accounts.map(a => ({ kind: a.kind, expired: a.expiresAt ? a.expiresAt < Date.now() : undefined })), instances: store.data.instances.map(i => ({ minecraft: i.minecraft, loader: i.loader, installed: i.installed })), memory: { min: store.data.settings.minMemory, max: store.data.settings.maxMemory } }, null, 2)); return result.filePath;
     }
-    case 'update.check': return updates.check();
+    case 'update.check': return updates.check(store.data.settings.updateChannel);
     case 'update.download': return updates.download();
-    case 'update.apply': idle(); return updates.apply();
+    case 'update.apply': idle(); if (skinEditorActive) throw new Error('Salve ou feche o Skin Studio antes de reiniciar para atualizar'); store.data.pendingUpdateVersion = updates.state.version; await store.save(); return updates.apply();
   }
 }
 async function createWindow(): Promise<void> {
@@ -280,8 +281,8 @@ async function createWindow(): Promise<void> {
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   if (devUrl) await window.loadURL(devUrl); else await window.loadFile(rendererPath);
   window.on('close', event => {
-    if (skinEditorActive && !operation && minecraft.game.status === 'idle' && updates.state.status !== 'downloading') { event.preventDefault(); window!.webContents.send('matrix:skin-close'); return; }
-    if (operation || minecraft.game.status !== 'idle' || updates.state.status === 'downloading') { event.preventDefault(); void dialog.showMessageBox(window!, { type: 'info', message: 'Cancele a operação e encerre o Minecraft antes de fechar o launcher.' }); }
+    if (skinEditorActive && !operation && minecraft.game.status === 'idle') { event.preventDefault(); window!.webContents.send('matrix:skin-close'); return; }
+    if (operation || minecraft.game.status !== 'idle') { event.preventDefault(); void dialog.showMessageBox(window!, { type: 'info', message: 'Cancele a operação e encerre o Minecraft antes de fechar o launcher.' }); }
   });
 }
 const lock = app.requestSingleInstanceLock();
@@ -296,7 +297,17 @@ else {
     vault = new Vault(join(userData, 'credentials.bin'), safeStorage);
     setNetworkTransport(nativeHttpsFetch);
     auth = new MicrosoftAuth(distribution.microsoftClientId, vault, new MicrosoftAuthenticator({ fetch: nativeHttpsFetch }), nativeHttpsFetch);
-    minecraft = new Minecraft(emit, message => logs.write(message)); updates = new Updates(distribution.updateUrl, distribution.publisherName, emit);
+    minecraft = new Minecraft(emit, message => logs.write(message));
+    let loggedUpdateStatus = '';
+    updates = new Updates(() => {
+      if (updates.state.status !== loggedUpdateStatus) { loggedUpdateStatus = updates.state.status; logs.write(`Atualizador: ${loggedUpdateStatus}${updates.state.version ? ` (${updates.state.version})` : ''}`); }
+      emit();
+    });
+    if (store.data.pendingUpdateVersion) {
+      updates.confirmRestart(store.data.pendingUpdateVersion, app.getVersion());
+      logs.write(updates.state.message ?? 'Resultado da atualização observado na inicialização');
+      delete store.data.pendingUpdateVersion; await store.save();
+    }
     smart = new SmartInstallService(store, minecraft);
     modCenter = new ModCenterService(store, smart.catalog, async id => (await smart.content(id)), (id, projectId, enabled) => smart.toggleMod(id, projectId, enabled));
     skins = new SkinLibrary(join(userData, 'skin-studio'));
@@ -315,7 +326,13 @@ else {
     });
     await createWindow(); logs.write('MATRIX Launcher iniciado'); void refreshCommunity();
     const timer = setInterval(() => void refreshCommunity(), 60000); timer.unref();
-    if (store.data.settings.checkUpdates && updates.state.status !== 'disabled') void updates.check().catch(error => logs.write(friendlyError(error)));
+    const checkUpdates = () => {
+      if (!store.data.settings.checkUpdates || updates.state.status === 'disabled' || operation || minecraft.game.status !== 'idle' || skinEditorActive) return;
+      lastAutomaticUpdateCheck = Date.now();
+      void updates.check(store.data.settings.updateChannel).catch(error => logs.write(`update.check: ${friendlyError(error)}`));
+    };
+    const initialUpdateCheck = setTimeout(checkUpdates, 45000); initialUpdateCheck.unref();
+    const updateTimer = setInterval(() => { if (Date.now() - lastAutomaticUpdateCheck >= store.data.settings.updateCheckIntervalHours * 60 * 60 * 1000) checkUpdates(); }, 15 * 60 * 1000); updateTimer.unref();
   }).catch(error => { dialog.showErrorBox('MATRIX Launcher', friendlyError(error)); app.quit(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

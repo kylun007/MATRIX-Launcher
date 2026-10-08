@@ -14,7 +14,7 @@ export const settingsSchema = z.object({
   serverHost: z.string().max(253).refine(s => s === '' || /^(?:[a-zA-Z0-9.-]+|[a-fA-F0-9:]+)$/.test(s)),
   serverPort: z.number().int().min(1).max(65535), serverOnlineMode: z.boolean(),
   communityApi: z.union([httpsUrl, z.literal('')]), discordUrl: z.union([httpsUrl, z.literal('')]),
-  theme: z.enum(['dark', 'light']), checkUpdates: z.boolean(), skinCamera: skinCameraSchema,
+  theme: z.enum(['dark', 'light']), checkUpdates: z.boolean(), updateChannel: z.enum(['stable', 'beta']).default('stable'), updateCheckIntervalHours: z.union([z.literal(6), z.literal(12), z.literal(24)]).default(6), skinCamera: skinCameraSchema,
 }).strict().refine(s => s.minMemory <= s.maxMemory, 'RAM mínima deve ser menor ou igual à máxima');
 export type Settings = z.infer<typeof settingsSchema>;
 export const accountSchema = z.object({ id: z.string().uuid(), kind: z.enum(['offline', 'microsoft']), name: nickname, uuid: z.string().regex(/^[a-f0-9]{32}$/i), skin: z.union([httpsUrl, z.literal('')]).default(''), expiresAt: z.number().optional(), skinProjectId: z.string().uuid().optional() }).strict();
@@ -22,11 +22,11 @@ export type Account = z.infer<typeof accountSchema>;
 export const instanceInput = z.object({ name: z.string().trim().min(1).max(60), minecraft: identifier, loader: z.enum(['vanilla', 'fabric', 'forge', 'neoforge']), loaderVersion: z.string().regex(/^[A-Za-z0-9._+-]{0,80}$/) }).strict().refine(i => i.loader === 'vanilla' || i.loaderVersion.length > 0, 'Informe a versão do loader');
 export const instanceSchema = instanceInput.safeExtend({ id: z.string().uuid(), versionId: identifier.optional(), installed: z.boolean(), lastPlayed: z.number().optional(), modpackVersion: z.string().optional(), smart: smartStateSchema.optional(), launch: z.object({ minMemory: z.number().int().min(512).max(65536), maxMemory: z.number().int().min(1024).max(65536), javaPath: z.string().max(1024).optional() }).strict().refine(p => p.minMemory <= p.maxMemory).optional() });
 export type Instance = z.infer<typeof instanceSchema>;
-export const storeSchema = z.object({ schemaVersion: z.literal(1), settings: settingsSchema, accounts: z.array(accountSchema).max(100), instances: z.array(instanceSchema).max(100), selectedAccount: z.string().uuid().optional(), selectedInstance: z.string().uuid().optional(), modFavorites: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,100}$/)).max(500).default([]) }).strict();
+export const storeSchema = z.object({ schemaVersion: z.literal(2), settings: settingsSchema, accounts: z.array(accountSchema).max(100), instances: z.array(instanceSchema).max(100), selectedAccount: z.string().uuid().optional(), selectedInstance: z.string().uuid().optional(), pendingUpdateVersion: identifier.optional(), modFavorites: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,100}$/)).max(500).default([]) }).strict();
 export type StoreData = z.infer<typeof storeSchema>;
 export type Operation = { kind: 'minecraft' | 'java' | 'modpack' | 'auth' | 'smart' | 'mods'; label: string; bytes: number; total: number; speed: number; cancellable: boolean; smart?: SmartProgress };
 export type GameState = { status: 'idle' | 'starting' | 'running'; instanceId?: string; exitCode?: number | null; stoppedByUser?: boolean };
-export type UpdateState = { status: 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'; version?: string; percent?: number; message?: string };
+export type UpdateState = { status: 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'; version?: string; percent?: number; transferred?: number; total?: number; bytesPerSecond?: number; checkedAt?: number; releaseDate?: string; releaseNotes?: string; channel?: 'stable' | 'beta'; message?: string };
 export type News = { title: string; body: string; date: string; url?: string };
 export const communitySchema = z.object({
   schemaVersion: z.literal(1), news: z.array(z.object({ title: z.string().max(120), body: z.string().max(2000), date: z.string().datetime(), url: httpsUrl.optional() })).max(20),
