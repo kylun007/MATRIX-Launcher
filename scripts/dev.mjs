@@ -1,0 +1,12 @@
+import { createServer } from 'vite';
+import { build } from 'esbuild';
+import { spawn } from 'node:child_process';
+import electron from 'electron';
+import './icon.mjs';
+await build({ entryPoints: ['electron/main.ts'], outfile: 'dist-electron/main.cjs', bundle: true, packages: 'external', platform: 'node', target: 'node24', format: 'cjs', sourcemap: true });
+await build({ entryPoints: ['electron/preload.ts'], outfile: 'dist-electron/preload.cjs', bundle: true, external: ['electron'], platform: 'node', target: 'node24', format: 'cjs' });
+const server = await createServer(); await server.listen();
+const env = { ...process.env, MATRIX_DEV_URL: 'http://127.0.0.1:5173' }; delete env.ELECTRON_RUN_AS_NODE;
+const child = spawn(electron, ['.'], { stdio: 'inherit', env, windowsHide: false });
+child.on('exit', async code => { await server.close(); process.exit(code ?? 0); });
+process.on('SIGINT', () => child.kill());

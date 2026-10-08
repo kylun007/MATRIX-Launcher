@@ -1,0 +1,106 @@
+{
+  "name": "matrix-launcher",
+  "productName": "MATRIX Launcher",
+  "version": "0.3.1",
+  "private": true,
+  "description": "Launcher Minecraft Java da MATRIX Community",
+  "author": "MATRIX Community",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "engines": {
+    "node": ">=24.19.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/xmcl-compat.mjs && node node_modules/electron/install.js",
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-transform-types --test tests/*.test.ts",
+    "build": "npm run typecheck && node scripts/build.mjs",
+    "dist:win": "npm run build && node scripts/package.mjs",
+    "dist:linux": "npm run build && node scripts/package.mjs --linux",
+    "start": "electron .",
+    "licenses": "node scripts/licenses.mjs"
+  },
+  "dependencies": {
+    "@xmcl/core": "2.16.2",
+    "@xmcl/installer": "6.3.5",
+    "@xmcl/unzip": "2.1.2",
+    "@xmcl/user": "4.4.2",
+    "electron-updater": "6.8.9",
+    "pngjs": "7.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "semver": "7.8.5",
+    "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^24.0.0",
+    "@types/pngjs": "6.0.5",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@types/semver": "7.7.1",
+    "@vitejs/plugin-react": "6.1.0",
+    "electron": "44.6.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "skinview3d": "3.4.2",
+    "tailwindcss": "^4.1.0",
+    "three": "0.156.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
+  },
+  "overrides": {
+    "@xmcl/unzip": "2.1.2"
+  },
+  "build": {
+    "appId": "org.matrixcommunity.launcher",
+    "productName": "MATRIX Launcher",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "build/icon.png",
+      "scripts/xmcl-compat.mjs",
+      "LICENSE",
+      "docs/dependency-licenses.json",
+      "package.json"
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signtoolOptions": {
+        "publisherName": [
+          "MATRIX Community"
+        ]
+      },
+      "verifyUpdateCodeSignature": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "icon": "build/icon.png"
+    }
+  }
+}

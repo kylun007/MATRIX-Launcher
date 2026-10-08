@@ -1,0 +1,41 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ContentCatalog } from '../electron/services/catalog.ts';
+import { ModCenterService } from '../electron/services/mod-center.ts';
+import { Store, defaults } from '../electron/services/store.ts';
+import { setNetworkTransport } from '../electron/services/download.ts';
+import type { ContentFile } from '../shared/smart.ts';
+
+test('Mod Center downloads verified files into an isolated instance and preserves manual mods and worlds', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'matrix-mod-center-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const original = (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init);
+  const payload = Buffer.from('verified test mod'); const hash = createHash('sha512').update(payload).digest('hex');
+  setNetworkTransport((async input => new Response(String(input).includes('/versions/v2/') ? Buffer.from('updated test mod') : payload)) as typeof fetch); t.after(() => setNetworkTransport(original));
+  const id = randomUUID(); const instanceDir = join(root, 'instances', id); await mkdir(join(instanceDir, 'mods'), { recursive: true });
+  await mkdir(join(instanceDir, 'saves', 'World'), { recursive: true }); await writeFile(join(instanceDir, 'saves', 'World', 'level.dat'), 'personal world');
+  const store = new Store(join(root, 'settings.json'), root); store.data = defaults(root); store.data.instances.push({ id, name: 'Fabric', minecraft: '1.21.1', loader: 'fabric', loaderVersion: '0.16.0', installed: true });
+  const file: ContentFile = { projectId: 'samplemod', slug: 'samplemod', title: 'Sample Mod', versionId: 'v1', version: '1.0', kind: 'mod', filename: 'samplemod.jar', url: 'https://cdn.modrinth.com/data/samplemod/versions/v1/samplemod.jar', hash, algorithm: 'sha512', size: payload.length, license: 'MIT', sourceUrl: 'https://modrinth.com/mod/samplemod' };
+  let currentFile = file; const nextPayload = Buffer.from('updated test mod'); const nextHash = createHash('sha512').update(nextPayload).digest('hex');
+  class Catalog extends ContentCatalog { override async resolveProject() { return [currentFile]; } }
+  const service = new ModCenterService(store, new Catalog(), async () => ({ mods: [] }));
+  const plan = await service.plan(id, file.projectId); assert.equal(plan.files.length, 1);
+  await service.install(plan.id, new AbortController().signal, () => {});
+  assert.deepEqual(await readFile(join(instanceDir, 'mods', file.filename)), payload);
+  await writeFile(join(instanceDir, 'mods', 'personal.jar'), 'manual');
+  let listed = await service.list(id); assert.ok(listed.some(m => m.filename === file.filename && m.status === 'ok' && m.managed));
+  assert.ok(listed.some(m => m.filename === 'personal.jar' && m.source === 'manual'));
+  currentFile = { ...file, versionId: 'v2', version: '2.0', hash: nextHash, size: nextPayload.length, url: 'https://cdn.modrinth.com/data/samplemod/versions/v2/samplemod.jar' };
+  const update = await service.plan(id, file.projectId); assert.equal(update.replacements?.length, 1);
+  await service.install(update.id, new AbortController().signal, () => {});
+  assert.deepEqual(await readFile(join(instanceDir, 'mods', file.filename)), nextPayload);
+  const backups = await readdir(join(instanceDir, '.matrix-backups', 'mod-center', update.id));
+  assert.ok(backups.includes(file.filename)); assert.deepEqual(await readFile(join(instanceDir, '.matrix-backups', 'mod-center', update.id, file.filename)), payload);
+  await service.toggle(id, file.filename, false); listed = await service.list(id); assert.equal(listed.find(m => m.filename === file.filename)?.enabled, false);
+  await service.toggle(id, file.filename, true); await service.remove(id, file.filename);
+  assert.equal((await readdir(join(instanceDir, 'mods'))).includes('personal.jar'), true);
+  assert.equal(await readFile(join(instanceDir, 'saves', 'World', 'level.dat'), 'utf8'), 'personal world');
+});

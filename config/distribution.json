@@ -1,0 +1,9 @@
+{
+  "microsoftClientId": "",
+  "updateUrl": "",
+  "publisherName": "",
+  "communityApi": "",
+  "discordUrl": "",
+  "modpackAllowedHosts": ["matrixcommunity.dpdns.org", "cdn.modrinth.com"],
+  "website": "https://matrixcommunity.dpdns.org/"
+}

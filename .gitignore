@@ -1,0 +1,9 @@
+node_modules/
+.npm-cache/
+dist/
+dist-electron/
+release/
+.env
+*.log
+.smoke/
+coverage/
