@@ -1,9 +1,14 @@
 {
-  "microsoftClientId": "",
-  "updateUrl": "",
+  "microsoftClientId": "2ca65495-4538-469c-a723-bbef697c634f",
+  "githubOwner": "kylun007",
+  "githubRepo": "MATRIX-Launcher",
+  "updateManifestPublicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAUx/ov2U+zkOoWiN6gK+aIqBNl3d9T7+LuNxpPlqZugU=\n-----END PUBLIC KEY-----\n",
   "publisherName": "",
   "communityApi": "",
   "discordUrl": "",
-  "modpackAllowedHosts": ["matrixcommunity.dpdns.org", "cdn.modrinth.com"],
+  "modpackAllowedHosts": [
+    "matrixcommunity.dpdns.org",
+    "cdn.modrinth.com"
+  ],
   "website": "https://matrixcommunity.dpdns.org/"
 }
