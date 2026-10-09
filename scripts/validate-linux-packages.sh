@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'status=$?; printf "::error file=scripts/validate-linux-packages.sh,line=%s::Falha na validação: %s\n" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
 [[ "$(uname -s)" == Linux ]] || { echo 'Esta validação requer Linux.' >&2; exit 1; }
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 version="$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')"
