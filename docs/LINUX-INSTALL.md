@@ -14,7 +14,7 @@ A autorização administrativa é para instalar o pacote; execute o launcher com
 
 ## AppImage
 
-O arquivo `MATRIX-Launcher-VERSAO-linux-x64.AppImage` é portátil. Nas propriedades do arquivo, permita sua execução e abra-o. Guarde-o em uma pasta Linux onde seu usuário possa escrever. Algumas distribuições podem exigir componentes FUSE; consulte a mensagem de erro antes de instalar dependências.
+O arquivo `MATRIX-Launcher-VERSAO-linux-x86_64.AppImage` é portátil. Nas propriedades do arquivo, permita sua execução e abra-o. Guarde-o em uma pasta Linux onde seu usuário possa escrever. Algumas distribuições podem exigir componentes FUSE; consulte a mensagem de erro antes de instalar dependências.
 
 O AppImage é o formato preparado para atualização automática. Ela requer uma release com os metadados assinados correspondentes e testes entre versões. Os artefatos de teste do GitHub Actions não habilitam atualizações públicas por conta própria.
 

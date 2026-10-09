@@ -6,9 +6,9 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 version="$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')"
 deb="release/matrix-launcher_${version}_amd64.deb"
 rpm="release/matrix-launcher-${version}.x86_64.rpm"
-image="release/MATRIX-Launcher-${version}-linux-x64.AppImage"
+image="release/MATRIX-Launcher-${version}-linux-x86_64.AppImage"
 for package in "$deb" "$rpm" "$image"; do
-  test -s "$package" || { echo "Pacote ausente: $package" >&2; exit 1; }
+  test -s "$package" || { echo "::error::Pacote ausente: $package" >&2; exit 1; }
 done
 test "$(dpkg-deb -f "$deb" Package)" = matrix-launcher
 test "$(dpkg-deb -f "$deb" Version)" = "$version"
@@ -42,7 +42,7 @@ NODE
 cp docs/LINUX-INSTALL.md release/LEIA-ME-LINUX.md
 (
   cd release
-  sha256sum "matrix-launcher_${version}_amd64.deb" "matrix-launcher-${version}.x86_64.rpm" "MATRIX-Launcher-${version}-linux-x64.AppImage" > SHA256SUMS.txt
+  sha256sum "matrix-launcher_${version}_amd64.deb" "matrix-launcher-${version}.x86_64.rpm" "MATRIX-Launcher-${version}-linux-x86_64.AppImage" > SHA256SUMS.txt
   sha256sum -c SHA256SUMS.txt
 )
 echo "Pacotes MATRIX Launcher $version verificados. Ainda é necessário testar a abertura e o Minecraft no Linux do jogador."
