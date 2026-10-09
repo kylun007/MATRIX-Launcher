@@ -16,26 +16,27 @@ export class Vault {
   private check(): void {
     if (!this.crypto.isEncryptionAvailable() || this.crypto.getSelectedStorageBackend?.() === 'basic_text') throw new Error('Armazenamento seguro indisponível. Ative o cofre de credenciais do sistema para usar login Microsoft.');
   }
-  private async read(): Promise<Record<string, Secret>> {
+  private async read(): Promise<Record<string, unknown>> {
     this.check();
     try { return JSON.parse(this.crypto.decryptString(await readFile(this.file))); }
     catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {}; throw new Error('Não foi possível abrir credenciais. Entre novamente após recuperar o cofre do sistema.'); }
   }
-  async get(id: string): Promise<Secret | undefined> { await this.queue; return (await this.read())[id]; }
-  private mutate(action: (data: Record<string, Secret>) => void): Promise<void> {
+  async get(id: string): Promise<Secret | undefined> { await this.queue; return (await this.read())[id] as Secret | undefined; }
+  async getSecureValue<T>(id: string): Promise<T | undefined> { await this.queue; return (await this.read())[id] as T | undefined; }
+  private mutate(action: (data: Record<string, unknown>) => void): Promise<void> {
     const next = this.queue.then(async () => {
       const data = await this.read(); action(data); await mkdir(dirname(this.file), { recursive: true });
       const temp = `${this.file}.tmp`; await writeFile(temp, this.crypto.encryptString(JSON.stringify(data)), { mode: 0o600 }); await rename(temp, this.file);
     }); this.queue = next.catch(() => {}); return next;
   }
   set(id: string, secret: Secret): Promise<void> { return this.mutate(data => { data[id] = secret; }); }
+  setSecureValue<T>(id: string, value: T): Promise<void> { return this.mutate(data => { data[id] = value; }); }
   remove(id: string): Promise<void> { return this.mutate(data => { delete data[id]; }); }
 }
 const AUTH_BASE = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
 const SCOPES = 'XboxLive.signin offline_access';
 export interface XboxAdapter {
-  authenticateXboxLive(token: string, signal?: AbortSignal): Promise<{ Token: string }>;
-  authorizeXboxLive(token: string, relyingParty?: 'rp://api.minecraftservices.com/' | 'http://xboxlive.com', signal?: AbortSignal): Promise<{ Token: string; DisplayClaims: { xui: { uhs: string }[] } }>;
+  acquireXBoxToken(token: string, signal?: AbortSignal): Promise<{ minecraftXstsResponse: { Token: string; DisplayClaims: { xui: { uhs: string }[] } } }>;
   loginMinecraftWithXBox(uhs: string, token: string, signal?: AbortSignal): Promise<{ access_token: string; expires_in: number }>;
 }
 export class MicrosoftAuth {
@@ -67,9 +68,13 @@ export class MicrosoftAuth {
     throw new Error('O código de login expirou. Inicie um novo login.');
   }
   private async complete(oauth: OAuthToken, existing?: Account, signal?: AbortSignal): Promise<Account> {
-    const live = await this.xbox.authenticateXboxLive(oauth.access_token, signal).catch(() => { throw new Error('Falha no Xbox Live. Verifique se a conta possui um perfil Xbox.'); });
-    const xsts = await this.xbox.authorizeXboxLive(live.Token, 'rp://api.minecraftservices.com/', signal).catch(() => { throw new Error('Xbox recusou a conta. Verifique região, perfil Xbox e autorização familiar.'); });
-    const mc = await this.xbox.loginMinecraftWithXBox(xsts.DisplayClaims.xui[0].uhs, xsts.Token, signal).catch(() => { throw new Error('Minecraft recusou o aplicativo ou a sessão. Verifique a autorização do client ID MATRIX e tente novamente.'); });
+    const { minecraftXstsResponse: xsts } = await this.xbox.acquireXBoxToken(oauth.access_token, signal).catch(() => { throw new Error('Xbox recusou a autenticacao. Verifique o perfil Xbox e as restricoes familiares.'); });
+    const mc = await this.xbox.loginMinecraftWithXBox(xsts.DisplayClaims.xui[0].uhs, xsts.Token, signal).catch(error => {
+      const status = (error as { status?: unknown })?.status;
+      const retryable = (error as { retryable?: unknown })?.retryable === true;
+      const detail = typeof status === 'number' ? ` (HTTP ${status}${retryable ? ', tente novamente mais tarde' : ''})` : '';
+      throw new Error(`Minecraft recusou a troca da sessao${detail}. Confirme a conta e a autorizacao do aplicativo MATRIX.`);
+    });
     const headers = { Authorization: `Bearer ${mc.access_token}` };
     const entitlementResponse = await httpsFetch('https://api.minecraftservices.com/entitlements/mcstore', { headers, signal }, ['api.minecraftservices.com'], this.fetcher);
     if (!entitlementResponse.ok) throw new Error('Não foi possível verificar a licença do Minecraft Java');

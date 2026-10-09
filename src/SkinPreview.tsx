@@ -199,7 +199,11 @@ export const SkinPreview = forwardRef<SkinPreviewHandle, SkinPreviewProps>(funct
       pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
       scene.updateMatrixWorld(true); camera.updateMatrixWorld(true); raycaster.setFromCamera(pointer, camera);
       const p = latest.current;
-      const targets = parts.filter(part => player.skin[part].visible && (p.part === 'all' || p.part === part)).flatMap(part => [player.skin[part].outerLayer, player.skin[part].innerLayer]).filter(target => target.visible);
+      // Raycaster does not account for transparent texels, so an invisible outer
+      // layer can otherwise intercept clicks intended for the base layer.
+      const targets = parts.filter(part => player.skin[part].visible && (p.part === 'all' || p.part === part))
+        .map(part => p.layer === 'base' ? player.skin[part].innerLayer : player.skin[part].outerLayer)
+        .filter(target => target.visible);
       const intersection = raycaster.intersectObjects(targets, true)[0];
       if (!intersection) return;
       return { pixel: intersection.uv ? [Math.min(63, Math.max(0, Math.floor(intersection.uv.x * 64))), Math.min(63, Math.max(0, Math.floor((1 - intersection.uv.y) * 64)))] as [number, number] : undefined, point: intersection.point.clone() };

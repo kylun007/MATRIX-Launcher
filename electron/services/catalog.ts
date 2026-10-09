@@ -68,9 +68,9 @@ export class ContentCatalog {
   }
 
   private async versions(p: Project, kind: 'mod' | 'shader', signal?: AbortSignal, minecraft = MC, loader = kind === 'mod' ? 'fabric' : 'iris'): Promise<Version[]> {
-    const params = new URLSearchParams({ game_versions: JSON.stringify([minecraft]), loaders: JSON.stringify([loader]), include_changelog: 'false' });
+    const params = new URLSearchParams({ game_versions: JSON.stringify([minecraft]), include_changelog: 'false' }); if (loader) params.set('loaders', JSON.stringify([loader]));
     const versions = z.array(versionSchema).max(3000).parse(await this.json(`${API}/project/${p.id}/version?${params}`, signal));
-    return versions.filter(v => v.project_id === p.id && v.version_type === 'release' && ['listed', 'archived'].includes(v.status) && v.game_versions.includes(minecraft) && v.loaders.includes(loader))
+    return versions.filter(v => v.project_id === p.id && v.version_type === 'release' && ['listed', 'archived'].includes(v.status) && v.game_versions.includes(minecraft) && (!loader || v.loaders.includes(loader)))
       .sort((a, b) => Date.parse(b.date_published) - Date.parse(a.date_published));
   }
 
@@ -175,10 +175,19 @@ export class ContentCatalog {
   async details(projectId: string, minecraft: string, loader: string, signal?: AbortSignal): Promise<ModProject> {
     const raw = projectSchema.parse(await this.json(`${API}/project/${encodeURIComponent(projectId)}`, signal));
     if (raw.project_type !== 'mod' || !['approved', 'archived'].includes(raw.status)) throw new Error('Projeto Modrinth indisponível ou não aprovado.');
-    const supported = loader === 'vanilla' ? [] : await this.versions(raw, 'mod', signal, minecraft, loader);
+    // A Vanilla instance cannot run mods, but still show releases available for
+    // the selected Minecraft version so users can see which loader is needed.
+    const supported = await this.versions(raw, 'mod', signal, minecraft, loader === 'vanilla' ? '' : loader);
+    const availableLoaders = [...new Set(supported.flatMap(v => v.loaders.filter(value => ['fabric', 'forge', 'neoforge'].includes(value))))];
+    const compatible = loader !== 'vanilla' && supported.length > 0;
+    const reason = loader === 'vanilla'
+      ? supported.length
+        ? `Há versões para Minecraft ${minecraft} em ${availableLoaders.join(', ') || 'outros loaders'}, mas uma instalação Vanilla não carrega mods. Selecione ou crie uma instância com loader.`
+        : `Nenhuma versão release compatível com Minecraft ${minecraft} foi encontrada.`
+      : !supported.length ? `Sem versão release compatível com Minecraft ${minecraft} e ${loader}.` : undefined;
     const icon = raw.icon_url ? secureUrl(raw.icon_url, ['cdn.modrinth.com']).href : undefined;
     const gallery = (raw.gallery ?? []).map(g => { try { return secureUrl(g.url, ['cdn.modrinth.com']).href; } catch { return undefined; } }).filter((u): u is string => !!u);
-    return { id: raw.id, slug: raw.slug, title: raw.title, description: raw.description, author: raw.team ?? 'Autor no Modrinth', downloads: raw.downloads ?? 0, license: raw.license.name || raw.license.id, categories: raw.categories ?? [], icon, gallery, sourceUrl: `https://modrinth.com/mod/${raw.slug}`, compatible: supported.length > 0, versions: supported.map(v => v.version_number), ...(!supported.length ? { reason: `Sem versão release compatível com Minecraft ${minecraft} e ${loader}.` } : {}) };
+    return { id: raw.id, slug: raw.slug, title: raw.title, description: raw.description, author: raw.team ?? 'Autor no Modrinth', downloads: raw.downloads ?? 0, license: raw.license.name || raw.license.id, categories: raw.categories ?? [], icon, gallery, sourceUrl: `https://modrinth.com/mod/${raw.slug}`, compatible, versions: supported.map(v => v.version_number), availableLoaders, ...(reason ? { reason } : {}) };
   }
 
   async resolveProject(projectId: string, minecraft: string, loader: string, signal?: AbortSignal): Promise<ContentFile[]> {

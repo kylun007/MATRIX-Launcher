@@ -1,0 +1,14 @@
+{
+  "microsoftClientId": "",
+  "githubOwner": "",
+  "githubRepo": "",
+  "updateManifestPublicKey": "",
+  "publisherName": "",
+  "communityApi": "",
+  "discordUrl": "",
+  "modpackAllowedHosts": [],
+  "website": "https://matrixcommunity.dpdns.org/",
+  "supabaseUrl": "https://YOUR_PROJECT.supabase.co",
+  "supabaseAnonKey": "YOUR_SUPABASE_PUBLISHABLE_KEY",
+  "googleDriveClientId": ""
+}

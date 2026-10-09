@@ -10,5 +10,8 @@
     "matrixcommunity.dpdns.org",
     "cdn.modrinth.com"
   ],
-  "website": "https://matrixcommunity.dpdns.org/"
+  "website": "https://matrixcommunity.dpdns.org/",
+  "supabaseUrl": "https://ajfctfpxzqvnlxzjcmyg.supabase.co",
+  "supabaseAnonKey": "sb_publishable_KMvw6sWDCWTKwD27IMQbdQ_IXivYRKU",
+  "googleDriveClientId": "122342939980-ivdi0b0j2vejpmqvr725otofafa65r3e.apps.googleusercontent.com"
 }

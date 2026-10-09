@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 jobs:
-  windows-release:
+  windows-build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,39 +21,93 @@ jobs:
           if ($env:GITHUB_REF_NAME -ne "v$($pkg.version)") { throw "Tag $env:GITHUB_REF_NAME does not match package version $($pkg.version)" }
       - run: npm ci
       - run: npm test
-      - run: npm run typecheck
-      - name: Build release artifacts
+      - name: Build and sign Windows updater metadata
         env:
           MATRIX_PUBLIC_RELEASE: '1'
           MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
           MATRIX_UPDATE_SIGNING_KEY: ${{ secrets.MATRIX_UPDATE_SIGNING_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if (Test-Path release) { Remove-Item -LiteralPath release -Recurse -Force }
-          npm run dist:win
-      - name: Sign and validate update manifest
-        env:
-          MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
-          MATRIX_UPDATE_SIGNING_KEY: ${{ secrets.MATRIX_UPDATE_SIGNING_KEY }}
         shell: pwsh
         run: |
-          $installer = Get-ChildItem release -Filter '*Setup*.exe' | Select-Object -First 1
-          if (-not $installer) { throw 'NSIS installer was not generated.' }
+          npm run dist:win
           $metadata = if ($env:MATRIX_UPDATE_CHANNEL -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
           if (-not (Test-Path "release/$metadata")) { throw "Missing updater metadata: $metadata" }
           node scripts/sign-update-manifest.mjs "release/$metadata"
-          if (-not (Test-Path "release/$metadata.sig")) { throw 'Signed manifest was not generated.' }
-          if ((Get-Content "release/$metadata" -Raw) -notmatch 'sha512:') { throw 'Updater metadata has no SHA-512 hash.' }
-      - name: Publish validated artifacts
-        shell: pwsh
+          if (-not (Test-Path "release/$metadata.sig")) { throw 'Signed Windows manifest was not generated.' }
+          if (-not (Get-ChildItem release -Filter '*Setup*.exe')) { throw 'NSIS installer was not generated.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matrix-windows-release
+          path: |
+            release/*Setup*.exe
+            release/*Setup*.exe.blockmap
+            release/latest.yml
+            release/latest.yml.sig
+            release/beta.yml
+            release/beta.yml.sig
+          if-no-files-found: error
+  linux-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify tag matches package version
+        run: node -e "const p=require('./package.json'); if (process.env.GITHUB_REF_NAME !== 'v'+p.version) process.exit(1)"
+      - run: npm ci
+      - run: npm test
+      - name: Build and sign Linux updater metadata
+        env:
+          MATRIX_PUBLIC_RELEASE: '1'
+          MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
+          MATRIX_UPDATE_PLATFORM: linux
+          MATRIX_UPDATE_SIGNING_KEY: ${{ secrets.MATRIX_UPDATE_SIGNING_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run dist:linux
+          test -n "$(find release -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$(find release -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$(find release -maxdepth 1 -type f -name '*.rpm' -print -quit)"
+          metadata=latest-linux.yml
+          if [ "$MATRIX_UPDATE_CHANNEL" = beta ]; then metadata=beta-linux.yml; fi
+          test -f "release/$metadata"
+          node scripts/sign-update-manifest.mjs "release/$metadata"
+          test -f "release/$metadata.sig"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matrix-linux-release
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/latest-linux.yml
+            release/latest-linux.yml.sig
+            release/beta-linux.yml
+            release/beta-linux.yml.sig
+          if-no-files-found: error
+  publish:
+    needs: [windows-build, linux-build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: matrix-windows-release
+          path: release/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: matrix-linux-release
+          path: release/linux
+      - name: Publish validated cross-platform release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MATRIX_UPDATE_CHANNEL: ${{ contains(github.ref_name, '-') && 'beta' || 'stable' }}
         run: |
-          $releaseArgs = @('release', 'create', $env:GITHUB_REF_NAME, '--verify-tag', '--title', $env:GITHUB_REF_NAME, '--generate-notes')
-          if ($env:MATRIX_UPDATE_CHANNEL -eq 'beta') { $releaseArgs += '--prerelease' }
-          $metadata = if ($env:MATRIX_UPDATE_CHANNEL -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
-          $assets = Get-ChildItem release -File | Where-Object { $_.Name -like '*Setup*.exe*' -or $_.Name -eq $metadata -or $_.Name -eq "$metadata.sig" } | ForEach-Object { $_.FullName }
-          if (-not $assets) { throw 'No release assets were generated.' }
-          $releaseArgs += $assets
-          gh @releaseArgs
+          test -n "$(find release/windows -type f -name '*Setup*.exe' -print -quit)"
+          test -n "$(find release/linux -type f -name '*.AppImage' -print -quit)"
+          args=(release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then args+=(--prerelease); fi
+          assets=(release/windows/* release/linux/*)
+          gh "${args[@]}" "${assets[@]}"

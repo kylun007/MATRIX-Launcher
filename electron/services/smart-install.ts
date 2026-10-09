@@ -39,7 +39,9 @@ function memoryCheck(maxMemory: number): void {
 }
 export class SmartInstallService {
   private plans = new Map<string, { plan: SmartPlan; instanceId?: string; enableIris?: boolean }>();
+  private libraryLookup?: (file: ContentFile) => Promise<string | undefined>;
   constructor(private store: Store, private minecraft: Minecraft, readonly catalog = new ContentCatalog(), private runtime = { detectJava, installJava, probeJava }) {}
+  setLibraryLookup(lookup: (file: ContentFile) => Promise<string | undefined>): void { this.libraryLookup = lookup; }
   private instance(id: string): Instance { const i = this.store.data.instances.find(i => i.id === id); if (!i?.smart) throw new Error('Instância Smart Install não encontrada'); return i; }
   private root(i: Instance): string { return instanceDirectory(this.store.data.settings, i); }
   private async journal(i: Instance): Promise<Journal> {
@@ -121,6 +123,13 @@ export class SmartInstallService {
   private async cached(file: ContentFile, signal: AbortSignal, progress?: (bytes: number, total: number, speed: number) => void): Promise<string> {
     validateContent(file); const root = this.store.data.settings.gameDirectory;
     const destination = await preparePath(root, `.smart-cache/${file.hash}.${file.kind === 'mod' ? 'jar' : 'zip'}`);
+    const local = await this.libraryLookup?.(file);
+    if (local) {
+      signal.throwIfAborted(); if (await matches(destination, file.hash, file.algorithm, file.size)) { progress?.(file.size, file.size, 0); return destination; }
+      const temp = await preparePath(root, `.smart-cache/.${randomUUID()}.tmp`); await noLinks(root, temp);
+      try { await copyFile(local, temp); if (!await matches(temp, file.hash, file.algorithm, file.size)) throw new Error('A cópia da biblioteca falhou na validação de integridade.'); signal.throwIfAborted(); await rename(temp, destination); progress?.(file.size, file.size, 0); return destination; }
+      catch (error) { await rm(temp, { force: true }).catch(() => {}); throw error; }
+    }
     await downloadFile({ ...file, destination, hosts: CDN, signal, progress }); return destination;
   }
   private path(root: string, f: ContentFile, enabled = f.enabled !== false): string { return safePath(root, `${f.kind === 'mod' ? 'mods' : 'shaderpacks'}/${f.filename}${!enabled && f.kind === 'mod' ? '.disabled' : ''}`); }

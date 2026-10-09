@@ -1,7 +1,7 @@
 {
   "name": "matrix-launcher",
   "productName": "MATRIX Launcher",
-  "version": "0.3.1",
+  "version": "0.3.6",
   "private": true,
   "description": "Launcher Minecraft Java da MATRIX Community",
   "author": "MATRIX Community",
@@ -32,6 +32,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "semver": "7.8.5",
+    "yazl": "2.5.1",
     "zod": "4.1.8"
   },
   "devDependencies": {
@@ -92,10 +93,33 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb",
+        "rpm"
       ],
       "category": "Game",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "executableName": "matrix-launcher",
+      "maintainer": "MATRIX Community <kylun007@users.noreply.github.com>",
+      "synopsis": "Launcher Minecraft Java da MATRIX Community",
+      "desktop": {
+        "entry": {
+          "Name": "MATRIX Launcher",
+          "Categories": "Game;",
+          "Terminal": false,
+          "Type": "Application"
+        }
+      }
+    },
+    "appImage": {
+      "artifactName": "MATRIX-Launcher-${version}-linux-${arch}.AppImage",
+      "executableArgs": []
+    },
+    "deb": {
+      "artifactName": "matrix-launcher_${version}_amd64.deb"
+    },
+    "rpm": {
+      "artifactName": "matrix-launcher-${version}.x86_64.rpm"
     }
   }
 }

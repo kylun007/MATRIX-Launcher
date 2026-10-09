@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { skinCommands, skinCameraSchema, type SkinResults } from './skin.ts';
 import { hardwareOverrideSchema, smartPreferencesSchema, smartRequestSchema, smartStateSchema, type Hardware, type Recommendation, type ContentProject, type SmartPlan, type InstalledContent, type SmartProgress } from './smart.ts';
 import { modCommands, type ModResults } from './mod-center.ts';
+import { libraryCommands, type LibraryResults } from './mod-library.ts';
+import type { MatrixAuthState, MatrixDriveBackup, MatrixDriveState, MatrixIdentity } from './matrix-account.ts';
 
 export const nickname = z.string().regex(/^[A-Za-z0-9_]{3,16}$/, 'Use de 3 a 16 letras, números ou _');
 export const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/);
@@ -24,7 +26,7 @@ export const instanceSchema = instanceInput.safeExtend({ id: z.string().uuid(), 
 export type Instance = z.infer<typeof instanceSchema>;
 export const storeSchema = z.object({ schemaVersion: z.literal(2), settings: settingsSchema, accounts: z.array(accountSchema).max(100), instances: z.array(instanceSchema).max(100), selectedAccount: z.string().uuid().optional(), selectedInstance: z.string().uuid().optional(), pendingUpdateVersion: identifier.optional(), modFavorites: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,100}$/)).max(500).default([]) }).strict();
 export type StoreData = z.infer<typeof storeSchema>;
-export type Operation = { kind: 'minecraft' | 'java' | 'modpack' | 'auth' | 'smart' | 'mods'; label: string; bytes: number; total: number; speed: number; cancellable: boolean; smart?: SmartProgress };
+export type Operation = { kind: 'minecraft' | 'java' | 'modpack' | 'auth' | 'smart' | 'mods' | 'cloud'; label: string; bytes: number; total: number; speed: number; cancellable: boolean; smart?: SmartProgress };
 export type GameState = { status: 'idle' | 'starting' | 'running'; instanceId?: string; exitCode?: number | null; stoppedByUser?: boolean };
 export type UpdateState = { status: 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'; version?: string; percent?: number; transferred?: number; total?: number; bytesPerSecond?: number; checkedAt?: number; releaseDate?: string; releaseNotes?: string; channel?: 'stable' | 'beta'; message?: string };
 export type News = { title: string; body: string; date: string; url?: string };
@@ -37,7 +39,7 @@ export const communitySchema = z.object({
 export type Community = z.infer<typeof communitySchema>;
 export type ServerStatus = { status: 'unconfigured' | 'online' | 'offline'; online?: number; max?: number; latency?: number; message?: string };
 export type JavaState = { status: 'unknown' | 'ready' | 'missing' | 'incompatible'; required?: number; major?: number };
-export type Snapshot = StoreData & { operation?: Operation; game: GameState; java: JavaState; update: UpdateState; server: ServerStatus; community?: Community; communityError?: string; authCode?: { code: string; url: string; expiresAt: number }; error?: string; appVersion: string; microsoftConfigured: boolean };
+export type Snapshot = StoreData & { operation?: Operation; game: GameState; java: JavaState; update: UpdateState; server: ServerStatus; community?: Community; communityError?: string; authCode?: { code: string; url: string; expiresAt: number }; error?: string; appVersion: string; microsoftConfigured: boolean; matrixAccount: MatrixAuthState; matrixDrive: MatrixDriveState };
 export type Release = { id: string; releaseTime: string };
 export const manifestSchema = z.object({
   schemaVersion: z.literal(1), id: identifier, version: identifier, minecraft: identifier,
@@ -49,6 +51,7 @@ export const manifestSchema = z.object({
 export type ModpackManifest = z.infer<typeof manifestSchema>;
 export const commandSchemas = {
   ...modCommands,
+  ...libraryCommands,
   ...skinCommands,
   snapshot: z.undefined(), releases: z.undefined(),
   settings: settingsSchema,
@@ -56,6 +59,10 @@ export const commandSchemas = {
   'account.rename': z.object({ id: z.string().uuid(), name: nickname }).strict(),
   'account.select': z.string().uuid(), 'account.delete': z.string().uuid(),
   'auth.login': z.undefined(),
+  'matrix.auth.google': z.undefined(), 'matrix.auth.discord': z.undefined(),
+  'matrix.auth.email.request': z.object({ email: z.string().trim().email().max(254) }).strict(),
+  'matrix.auth.email.verify': z.object({ code: z.string().trim().regex(/^\d{6,8}$/) }).strict(), 'matrix.auth.logout': z.undefined(),
+  'matrix.drive.connect': z.undefined(), 'matrix.drive.disconnect': z.undefined(), 'matrix.drive.list': z.undefined(), 'matrix.drive.backup': z.enum(['files', 'folder']), 'matrix.drive.restore': z.string().regex(/^[A-Za-z0-9_-]{5,200}$/), 'matrix.drive.delete': z.string().regex(/^[A-Za-z0-9_-]{5,200}$/),
   'instance.create': instanceInput, 'instance.select': z.string().uuid(), 'instance.delete': z.string().uuid(),
   'instance.install': z.string().uuid(), 'instance.open': z.string().uuid(), 'instance.inspect': z.string().uuid(),
   'instance.discover': z.undefined(),
@@ -84,10 +91,12 @@ export const commandSchemas = {
 } as const;
 export type Command = keyof typeof commandSchemas;
 export type Input<C extends Command> = z.infer<(typeof commandSchemas)[C]>;
-export type CommandResults = SkinResults & ModResults & {
+export type CommandResults = SkinResults & ModResults & LibraryResults & {
   snapshot: Snapshot; releases: Release[]; settings: void;
   'account.create': void; 'account.rename': void; 'account.select': void; 'account.delete': void;
   'auth.login': void; 'instance.create': void; 'instance.select': void; 'instance.delete': void;
+  'matrix.auth.google': MatrixIdentity; 'matrix.auth.discord': MatrixIdentity; 'matrix.auth.email.request': void; 'matrix.auth.email.verify': MatrixIdentity; 'matrix.auth.logout': void;
+  'matrix.drive.connect': void; 'matrix.drive.disconnect': void; 'matrix.drive.list': MatrixDriveBackup[]; 'matrix.drive.backup': MatrixDriveBackup; 'matrix.drive.restore': void; 'matrix.drive.delete': void;
   'instance.install': void; 'instance.open': void; 'instance.inspect': { valid: boolean; message: string };
   'instance.discover': string[];
   'instance.rename': void;

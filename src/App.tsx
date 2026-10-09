@@ -4,17 +4,19 @@ import { Icon, Saturn, type IconName } from './Icons';
 import { SkinAvatar } from './SkinAvatar';
 import { SmartInstall } from './SmartInstall';
 import { Welcome } from './Welcome';
+import { MatrixAccountPage } from './MatrixAccount';
 import { parseWelcomeProgress, shouldAutoWelcome, type WelcomeProgress } from '../shared/welcome';
 import { WelcomeTour, welcomeTour } from './WelcomeTour';
 import distribution from '../config/distribution.json';
 
 const SkinStudio = lazy(() => import('./SkinStudio').then(module => ({ default: module.SkinStudio })));
 const ModCenter = lazy(() => import('./ModCenter').then(module => ({ default: module.ModCenter })));
-type Page = 'home' | 'installations' | 'accounts' | 'settings' | 'help' | 'smart' | 'skin' | 'modcenter';
-const pages: { id: Page; label: string; icon: IconName }[] = [{ id: 'home', label: 'Início', icon: 'home' }, { id: 'installations', label: 'Instalações', icon: 'box' }, { id: 'accounts', label: 'Contas', icon: 'user' }, { id: 'settings', label: 'Configurações', icon: 'settings' }, { id: 'help', label: 'Ajuda', icon: 'log' }, { id: 'smart', label: 'Smart Install', icon: 'download' }, { id: 'skin', label: 'Skin Studio', icon: 'skin' }, { id: 'modcenter', label: 'Mod Center', icon: 'mods' }];
+type Page = 'home' | 'installations' | 'accounts' | 'matrixaccount' | 'settings' | 'help' | 'smart' | 'skin' | 'modcenter';
+const pages: { id: Page; label: string; icon: IconName }[] = [{ id: 'home', label: 'Início', icon: 'home' }, { id: 'installations', label: 'Instalações', icon: 'box' }, { id: 'accounts', label: 'Contas Minecraft', icon: 'user' }, { id: 'matrixaccount', label: 'Conta MATRIX', icon: 'cloud' }, { id: 'settings', label: 'Configurações', icon: 'settings' }, { id: 'help', label: 'Ajuda', icon: 'log' }, { id: 'smart', label: 'Smart Install', icon: 'download' }, { id: 'skin', label: 'Skin Studio', icon: 'skin' }, { id: 'modcenter', label: 'Mod Center', icon: 'mods' }];
 const contextTips: Partial<Record<Page, string>> = { installations: 'Cada instância tem versões, mods e configurações próprios. Seus mundos permanecem isolados.', modcenter: 'Selecione uma instância para consultar conteúdo compatível. Mods adicionados manualmente também aparecem na lista.', skin: 'Edite pixels no mapa 2D ou pinte no personagem. A prévia 3D é carregada somente ao abrir o estúdio.', smart: 'Smart Install cria perfis Fabric 1.21.1. Para outras versões, use o gerenciador de Instalações.' };
 const pageGroups: { label: string; pages: Page[] }[] = [
   { label: 'PRINCIPAL', pages: ['home', 'installations', 'smart', 'modcenter'] },
+  { label: 'MATRIX COMMUNITY', pages: ['matrixaccount'] },
   { label: 'PERSONALIZAÇÃO', pages: ['skin'] },
   { label: 'GERENCIAMENTO', pages: ['accounts', 'settings', 'help'] },
 ];
@@ -125,6 +127,7 @@ export function App() {
       {state.accounts.length ? <div className="account-grid">{state.accounts.map(a => <section className={`panel account-card ${a.id === state.selectedAccount ? 'selected' : ''}`} key={a.id}><div className="account-card-top">{a.skinProjectId ? <SkinAvatar projectId={a.skinProjectId} large/> : <Avatar name={a.name} skin={a.skin} large/>}<span className={`tag ${a.kind === 'microsoft' ? 'official' : ''}`}>{a.kind === 'microsoft' ? 'MICROSOFT' : 'OFFLINE'}</span></div><h3>{a.name}</h3><p>{a.kind === 'offline' ? 'Identidade local · sem autenticação online' : a.expiresAt && a.expiresAt < Date.now() ? 'Sessão expirada · renovada ao iniciar' : 'Minecraft Java autenticado'}</p><div className="account-card-actions"><Button onClick={() => { void call('account.select', a.id).then(() => setPage('skin')); }}>Skin Studio</Button><Button disabled={locked || a.id === state.selectedAccount} onClick={() => void call('account.select', a.id)} icon={a.id === state.selectedAccount ? 'check' : undefined}>{a.id === state.selectedAccount ? 'Selecionada' : 'Selecionar'}</Button>{a.kind === 'offline' && <button className="text-link" disabled={locked} onClick={() => setProfile({ id: a.id, name: a.name })}>Editar</button>}<button className="text-link muted" disabled={locked} onClick={() => setConfirm({ title: a.kind === 'microsoft' ? 'Desconectar conta?' : 'Excluir perfil offline?', text: 'Isso remove apenas o perfil do launcher. Seus mundos permanecem preservados.', action: () => call('account.delete', a.id) })}>{a.kind === 'microsoft' ? 'Sair' : 'Excluir'}</button></div></section>)}</div> : <section className="panel"><Empty icon="user" title="Adicione sua primeira conta">Conecte sua conta Microsoft ou crie um perfil offline para jogar localmente.</Empty></section>}
       <div className="offline-note"><Icon name="shield"/>Um nickname offline não comprova propriedade de conta. Perfis offline não acessam servidores que exigem sessões Microsoft.</div>
     </>}
+    {page === 'matrixaccount' && <MatrixAccountPage state={state.matrixAccount} drive={state.matrixDrive}/>}
     {page === 'settings' && <SettingsPage state={state} locked={locked} call={call} toast={(text, error = false) => setToast({ text, error })} welcome={welcomeProgress} saveWelcome={saveWelcome} openWelcome={openWelcome} openHelp={() => setPage('help')}/>}
     {page === 'help' && <HelpCenter openPage={setPage} openWelcome={openWelcome}/>}
     {page === 'smart' && <SmartInstall state={state} openLibrary={() => setPage('installations')}/>}

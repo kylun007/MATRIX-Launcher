@@ -9,7 +9,8 @@ import { safePath, preparePath, secureUrl, redact } from '../electron/services/s
 import { settingsSchema, commandSchemas, communitySchema } from '../shared/contracts.ts';
 import { validateModpack, syncModpack } from '../electron/services/modpack.ts';
 import { downloadFile, httpsFetch } from '../electron/services/download.ts';
-import { javaRequirement, probeJava } from '../electron/services/java.ts';
+import { javaRequirement, probeJava, runtimeSymlinkTarget } from '../electron/services/java.ts';
+import { linuxDataDirectory, linuxStateDirectory } from '../electron/services/xdg.ts';
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 async function temp(t: { after(fn: () => Promise<void>): void }) { const path = await mkdtemp(join(tmpdir(), 'matrix-test-')); t.after(() => rm(path, { recursive: true, force: true })); return path; }
@@ -101,3 +102,14 @@ test('community contract requires typed plain content and safe URLs', () => {
 test('logs redact credentials and JWTs', () => { const output = redact('Bearer secret access_token: abc refresh_token=def --accessToken ghijk'); assert.ok(!output.includes('secret')); assert.ok(!output.includes('abc')); assert.ok(!output.includes('def')); assert.ok(!output.includes('ghijk')); });
 test('Java requirements follow metadata and supported historical versions', () => { assert.equal(javaRequirement({ javaVersion: { majorVersion: 25 } }, '26.1'), 25); assert.equal(javaRequirement({}, '1.16.5'), 8); assert.equal(javaRequirement({}, '1.17.1'), 16); assert.equal(javaRequirement({}, '1.20.1'), 17); assert.equal(javaRequirement({}, '1.20.5'), 21); });
 test('invalid Java executable is rejected without shell evaluation', async () => { await assert.rejects(probeJava('nonexistent-matrix-java')); });
+test('Java runtime symbolic links are accepted only when their targets stay inside the runtime directory', () => {
+  assert.equal(runtimeSymlinkTarget('/runtime', 'lib/alias.so', 'real.so'), 'real.so');
+  assert.throws(() => runtimeSymlinkTarget('/runtime', 'lib/alias.so', '../../../outside'), /escapes/);
+  assert.throws(() => runtimeSymlinkTarget('/runtime', '../outside', 'file'), /path/i);
+});
+test('Linux data and state paths follow absolute XDG directories with standard defaults', () => {
+  assert.equal(linuxDataDirectory({}, '/home/player'), '/home/player/.local/share/matrix-launcher');
+  assert.equal(linuxStateDirectory({}, '/home/player'), '/home/player/.local/state/matrix-launcher');
+  assert.equal(linuxDataDirectory({ XDG_DATA_HOME: '/mnt/data' }, '/home/player'), '/mnt/data/matrix-launcher');
+  assert.equal(linuxDataDirectory({ XDG_DATA_HOME: 'relative' }, '/home/player'), '/home/player/.local/share/matrix-launcher');
+});

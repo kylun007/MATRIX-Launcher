@@ -8,7 +8,7 @@ if (publicRelease && (!process.env.MATRIX_UPDATE_SIGNING_KEY || !config.updateMa
   throw new Error('Release requer chave privada Ed25519 no secret MATRIX_UPDATE_SIGNING_KEY, chave pública no config/distribution.json, client ID, destino GitHub e GH_TOKEN.');
 }
 const publish = publicRelease ? [{ provider: 'github', owner: config.githubOwner, repo: config.githubRepo, channel: channel === 'stable' ? 'latest' : 'beta', releaseType: channel === 'stable' ? 'release' : 'prerelease' }] : undefined;
-await build({ win: process.argv.includes('--linux') ? undefined : ['nsis'], linux: process.argv.includes('--linux') ? ['AppImage'] : undefined,
+await build({ win: process.argv.includes('--linux') ? undefined : ['nsis'], linux: process.argv.includes('--linux') ? ['AppImage', 'deb', 'rpm'] : undefined,
   publish: 'never',
-  config: { compression: process.argv.includes('--fast') ? 'store' : 'normal', win: { verifyUpdateCodeSignature: false, signExecutable: false },
+  config: { compression: process.argv.includes('--fast') ? 'store' : 'normal', extraMetadata: { homepage: config.website }, win: { verifyUpdateCodeSignature: false, signExecutable: false },
     ...(publish ? { publish } : {}) } });

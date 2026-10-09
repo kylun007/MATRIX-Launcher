@@ -10,6 +10,17 @@ import { Store, defaults } from '../electron/services/store.ts';
 import { setNetworkTransport } from '../electron/services/download.ts';
 import type { ContentFile } from '../shared/smart.ts';
 
+test('Mod Center shows real mod releases and required loaders for a Vanilla instance', async () => {
+  const project = { id: 'sodium', slug: 'sodium', title: 'Sodium', description: 'Rendering optimization mod', project_type: 'mod', status: 'approved', team: 'jellysquid3', downloads: 1, categories: ['optimization'], client_side: 'required', license: { id: 'LGPL-3.0-only', name: 'LGPL-3.0-only', url: null } };
+  const version = { id: 'release263', project_id: 'sodium', version_number: 'mc26.3-0.9.2', version_type: 'release', status: 'listed', game_versions: ['26.3'], loaders: ['fabric', 'neoforge'], date_published: '2026-01-01T00:00:00Z', dependencies: [], files: [{ filename: 'sodium.jar', url: 'https://cdn.modrinth.com/data/sodium/versions/release263/sodium.jar', primary: true, size: 1, hashes: { sha1: 'a'.repeat(40) } }] };
+  const catalog = new ContentCatalog(async input => new Response(JSON.stringify(String(input).includes('/version?') ? [version] : project), { status: 200, headers: { 'content-type': 'application/json' } }));
+  const details = await catalog.details('sodium', '26.3', 'vanilla');
+  assert.deepEqual(details.versions, ['mc26.3-0.9.2']);
+  assert.deepEqual(details.availableLoaders, ['fabric', 'neoforge']);
+  assert.equal(details.compatible, false);
+  assert.match(details.reason ?? '', /Vanilla não carrega mods/);
+});
+
 test('Mod Center downloads verified files into an isolated instance and preserves manual mods and worlds', async t => {
   const root = await mkdtemp(join(tmpdir(), 'matrix-mod-center-')); t.after(() => rm(root, { recursive: true, force: true }));
   const original = (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init);

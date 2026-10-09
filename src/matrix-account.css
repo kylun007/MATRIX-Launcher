@@ -1,0 +1,84 @@
+.matrix-account-page { width: min(100%, 960px); min-width: 0; margin: 0 auto; display: grid; gap: 18px; padding-bottom: 12px; }
+.matrix-account-page .matrix-account-hero { position: relative; display: grid; justify-items: center; gap: 12px; overflow: hidden; padding: 24px; text-align: center; border-color: #b992653f; background: radial-gradient(ellipse at 92% 10%, #b9926518, transparent 38%), linear-gradient(125deg, var(--panel), #1d1b1a 72%, #24201b); }
+.matrix-account-hero::after { content: ''; position: absolute; width: 250px; height: 250px; right: -102px; bottom: -170px; border: 1px solid #d4b78625; border-radius: 50%; box-shadow: 0 0 0 18px #d4b78608, 0 0 0 38px #d4b78606; pointer-events: none; }
+.matrix-account-hero-icon,.matrix-drive-mark { width: 58px; height: 58px; display: grid; place-items: center; flex: 0 0 auto; color: var(--gold); border: 1px solid #b9926550; border-radius: 16px; background: #b9926512; }
+.matrix-account-hero-copy { width: 100%; max-width: 680px; min-width: 0; position: relative; z-index: 1; }
+.matrix-account-hero h2 { margin: 8px 0 9px; font-size: clamp(24px, 2.5vw, 30px); line-height: 1.25; font-weight: 600; letter-spacing: -.5px; overflow-wrap: anywhere; }
+.matrix-account-hero p { max-width: 680px; margin: 0 auto; color: var(--muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.matrix-benefits { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px 19px; margin-top: 14px; color: var(--text); font-size: 11px; }
+.matrix-benefits span { display: inline-flex; align-items: center; gap: 7px; }
+.matrix-benefits svg { color: var(--gold); }
+.matrix-avatar { position: relative; display: grid; place-items: center; flex-shrink: 0; overflow: hidden; border: 1px solid #b9926550; background: #b9926515; color: var(--gold); font-weight: 600; }
+.matrix-avatar-large { width: 68px; height: 68px; border-radius: 18px; font-size: 21px; }
+.matrix-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; border-radius: inherit; opacity: 0; }
+.matrix-avatar img.loaded { opacity: 1; }
+.matrix-profile-meta { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px 16px; width: 100%; padding-top: 16px; border-top: 1px solid var(--border); }
+.matrix-profile-meta p { margin: 0; max-width: 100%; font-size: 12px; }
+.matrix-profile-status { color: #b2d8aa; font-size: 11px; overflow-wrap: anywhere; }
+.matrix-profile-meta .button { font-size: 11px; }
+.matrix-login-panel { width: min(100%, 790px); justify-self: center; padding: clamp(24px, 4vw, 40px); border-color: #b9926536; box-shadow: 0 18px 55px #0002; }
+.matrix-login-intro { text-align: center; }
+.matrix-login-intro h3 { margin: 9px 0 8px; font-size: 22px; font-weight: 560; }
+.matrix-login-intro p { margin: 0 auto; max-width: 470px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.matrix-login-providers { width: min(100%, 560px); margin: 25px auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.matrix-provider-button { min-height: 50px; display: flex; justify-content: flex-start; align-items: center; gap: 11px; padding-inline: 15px; font-size: 12px; }
+.matrix-provider-button>svg { margin-left: auto; color: var(--muted); }
+.provider-mark { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; border-radius: 6px; background: #fff; }
+.provider-mark img { display: block; width: 18px; height: 18px; object-fit: contain; }
+.discord-mark { background: #5865f2; }
+.discord-mark img { width: 20px; }
+.matrix-email-toggle { grid-column: 1 / -1; justify-self: center; margin-top: 5px; font-size: 11px; }
+.matrix-email-toggle svg { vertical-align: middle; margin-left: 4px; }
+.matrix-email-form { width: min(100%, 560px); margin: 20px auto 0; padding-top: 19px; border-top: 1px solid var(--border); }
+.matrix-email-form .field { margin-bottom: 13px; }
+.matrix-email-form .muted { margin-top: 13px; }
+.matrix-login-footnote { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 25px auto 0; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); text-align: center; font-size: 10px; line-height: 1.6; }
+.matrix-login-footnote svg { flex: 0 0 auto; color: var(--gold); }
+.matrix-account-message { margin: 0; padding: 12px 15px; border: 1px solid transparent; border-radius: 8px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.matrix-account-message.error { color: #e7a09a; border-color: #bc777744; background: #bc77740c; }
+.matrix-account-message.success { color: #b2d8aa; border-color: #91ab9744; background: #91ab970c; }
+.matrix-drive-panel { min-width: 0; padding: 24px 26px; }
+.matrix-drive-panel>.matrix-account-message { margin-top: 16px; }
+.matrix-drive-heading { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 14px; }
+.matrix-drive-mark { width: 46px; height: 46px; border-radius: 13px; }
+.matrix-drive-heading h3 { margin: 4px 0; font-size: 17px; }
+.matrix-drive-heading p { margin: 0; color: var(--muted); font-size: 11px; }
+.matrix-drive-status { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.matrix-drive-status i { width: 7px; height: 7px; border-radius: 50%; background: #74706a; }
+.matrix-drive-status.connected i { background: #8eb295; box-shadow: 0 0 10px #8eb29555; }
+.matrix-drive-empty { margin: 20px 0 0; padding-top: 18px; border-top: 1px solid var(--border); }
+.matrix-drive-empty p { margin: 0 0 14px; max-width: 750px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.matrix-drive-empty p:last-child { margin-bottom: 0; }
+.matrix-drive-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 20px 0 0; }
+.matrix-drive-actions .button,.matrix-backup-row .button { font-size: 10px; padding: 9px 12px; }
+.matrix-drive-disconnect,.matrix-delete-backup { margin-left: auto; font-size: 10px; }
+.matrix-drive-note { margin: 12px 0 17px; max-width: 900px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.matrix-backup-list { border-top: 1px solid var(--border); }
+.matrix-backup-row { min-height: 61px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.matrix-backup-icon { width: 33px; height: 33px; display: grid; place-items: center; flex: 0 0 auto; color: var(--gold); background: #b9926512; border-radius: 8px; }
+.matrix-backup-info { min-width: 0; display: grid; gap: 4px; margin-right: auto; }
+.matrix-backup-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 550; }
+.matrix-backup-info small { color: var(--muted); font-size: 9px; }
+.matrix-drive-no-backups { display: flex; align-items: center; gap: 11px; margin: 14px 0 0; color: var(--muted); font-size: 11px; }
+.matrix-drive-no-backups svg { color: var(--gold-dark); }
+.matrix-privacy-note { margin: 0 3px; color: var(--muted); font-size: 10px; line-height: 1.65; }
+@media (max-width: 760px) {
+  .matrix-account-page .matrix-account-hero { padding: 22px; }
+  .matrix-account-hero-icon { width: 45px; height: 45px; border-radius: 12px; }
+  .matrix-account-hero-icon svg { width: 23px; height: 23px; }
+  .matrix-avatar-large { width: 60px; height: 60px; border-radius: 16px; }
+  .matrix-login-providers { grid-template-columns: 1fr; }
+  .matrix-email-toggle { grid-column: auto; }
+  .matrix-drive-actions { align-items: stretch; }
+  .matrix-drive-actions .button { flex: 1 1 150px; justify-content: center; }
+  .matrix-backup-row { flex-wrap: wrap; padding: 12px 0; }
+  .matrix-backup-info { flex: 1 1 calc(100% - 48px); }
+  .matrix-backup-row .button { margin-left: 45px; }
+  .matrix-delete-backup { margin-left: 0; }
+}
+@media (max-width: 480px) {
+  .matrix-account-page .matrix-account-hero { padding: 20px 18px; }
+  .matrix-drive-heading { grid-template-columns: 46px minmax(0, 1fr); }
+  .matrix-drive-status { grid-column: 2; margin-left: 0; }
+  .matrix-drive-panel { padding: 17px; }
+}

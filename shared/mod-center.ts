@@ -10,7 +10,7 @@ export const modSearchSchema = z.object({
   offset: z.number().int().min(0).max(10000).default(0), limit: z.number().int().min(1).max(30).default(12),
 }).strict();
 export type ModSearch = z.infer<typeof modSearchSchema>;
-export type ModProject = { id: string; slug: string; title: string; description: string; author: string; downloads: number; license: string; categories: string[]; icon?: string; gallery: string[]; sourceUrl: string; compatible: boolean; versions: string[]; reason?: string };
+export type ModProject = { id: string; slug: string; title: string; description: string; author: string; downloads: number; license: string; categories: string[]; icon?: string; gallery: string[]; sourceUrl: string; compatible: boolean; versions: string[]; availableLoaders?: string[]; reason?: string };
 export type ModPage = { projects: ModProject[]; offset: number; limit: number; total: number };
 export type ModPlan = { id: string; instanceId: string; projectId: string; files: ContentFile[]; replacements?: ContentFile[]; totalBytes: number; warnings: string[] };
 export type ManagedMod = { filename: string; title: string; version?: string; projectId?: string; enabled: boolean; managed: boolean; source: 'mod-center' | 'smart' | 'manual'; status: 'ok' | 'modified' | 'missing' | 'manual' };

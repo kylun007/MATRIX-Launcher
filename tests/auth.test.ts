@@ -7,7 +7,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { MicrosoftAuth, Vault, type CryptoStorage, type XboxAdapter } from '../electron/services/auth.ts';
 const key = randomBytes(32);
 const crypto: CryptoStorage = { isEncryptionAvailable: () => true, encryptString: value => { const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, iv); const bytes = Buffer.concat([cipher.update(value), cipher.final()]); return Buffer.concat([iv, cipher.getAuthTag(), bytes]); }, decryptString: value => { const decipher = createDecipheriv('aes-256-gcm', key, value.subarray(0, 12)); decipher.setAuthTag(value.subarray(12, 28)); return Buffer.concat([decipher.update(value.subarray(28)), decipher.final()]).toString(); } };
-const xbox: XboxAdapter = { authenticateXboxLive: async () => ({ Token: 'live' }), authorizeXboxLive: async () => ({ Token: 'xsts', DisplayClaims: { xui: [{ uhs: 'uhs' }] } }), loginMinecraftWithXBox: async () => ({ access_token: 'minecraft-secret', expires_in: 1 }) };
+const xbox: XboxAdapter = { acquireXBoxToken: async token => { assert.equal(token, 'oauth'); return { minecraftXstsResponse: { Token: 'xsts', DisplayClaims: { xui: [{ uhs: 'uhs' }] } } }; }, loginMinecraftWithXBox: async () => ({ access_token: 'minecraft-secret', expires_in: 1 }) };
 const clientId = '12345678-1234-1234-1234-123456789012';
 async function setup(t: { after(fn: () => Promise<void>): void }, owns = true) {
   const root = await mkdtemp(join(tmpdir(), 'matrix-auth-')); t.after(() => rm(root, { recursive: true, force: true }));

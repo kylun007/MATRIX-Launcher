@@ -34,6 +34,8 @@ Abra **Mod Center**, escolha uma instância instalada com Fabric, Forge ou NeoFo
 
 ## Para o jogador
 
+No Linux x86_64, extraia o projeto em sua pasta pessoal e execute `bash ./INICIAR-LINUX.sh` com Node.js 24.19 ou superior instalado. A primeira abertura prepara o build e cria um atalho no menu. Consulte [abertura simplificada no Linux](LEIA-ME-LINUX.md) para instruções e limitações.
+
 1. Abra Contas e crie um perfil offline para uso local, ou conecte uma conta Microsoft quando o distribuidor tiver configurado a autenticação.
 2. Em Instalações, crie uma instância e escolha uma versão estável. Clique em Instalar.
 3. Se Java não estiver disponível, clique em Instalar Java oficial. O aplicativo informa a versão necessária e só baixa o runtime após sua ação.

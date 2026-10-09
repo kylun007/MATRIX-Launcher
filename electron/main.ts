@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, clipboard } from 'electron';
+import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +10,8 @@ import distribution from '../config/distribution.json';
 import { commandSchemas, type Command, type Snapshot, type Operation, type Community, type ServerStatus, type Instance, type JavaState } from '../shared/contracts.ts';
 import { Store, addOffline, renameOffline } from './services/store.ts';
 import { Vault, MicrosoftAuth } from './services/auth.ts';
+import { MatrixAccountService } from './services/matrix-account.ts';
+import { MatrixDriveService } from './services/matrix-drive.ts';
 import { Minecraft, instanceDirectory, resourceDirectory } from './services/minecraft.ts';
 import { canonicalDirectory, friendlyError, secureUrl, noLinks } from './services/security.ts';
 import { detectJava, installJava, javaRequirement } from './services/java.ts';
@@ -25,13 +28,16 @@ import { SkinLibrary, decodeSkinPNG, encodeSkinPNG, decodePreviewPNG } from './s
 import { skinDocumentSchema, type SkinDraft, type SkinSave } from '../shared/skin.ts';
 import { importOfficialAccountSkin, applyAccountSkin } from './services/account-skin.ts';
 import { ModCenterService } from './services/mod-center.ts';
+import { ModLibraryService } from './services/mod-library.ts';
+import { linuxDataDirectory, linuxStateDirectory } from './services/xdg.ts';
 
 let window: BrowserWindow | undefined;
 const smoke = !app.isPackaged && process.argv.includes('--matrix-smoke');
 if (smoke) app.setPath('userData', join(process.cwd(), '.smoke/user-data'));
-let store: Store; let minecraft: Minecraft; let auth: MicrosoftAuth; let vault: Vault; let updates: Updates; let logs: Logs;
+let store: Store; let minecraft: Minecraft; let auth: MicrosoftAuth; let vault: Vault; let matrixAccount: MatrixAccountService; let matrixDrive: MatrixDriveService; let updates: Updates; let logs: Logs;
 let smart: SmartInstallService;
 let modCenter: ModCenterService;
+let modLibrary: ModLibraryService;
 let skins: SkinLibrary;
 let skinEditorActive = false;
 async function exportSkinFile(file: string, data: Buffer): Promise<void> {
@@ -52,7 +58,7 @@ let javaState: JavaState = { status: 'unknown' }; let javaKey = '';
 let lastAutomaticUpdateCheck = 0;
 const rendererPath = join(__dirname, '../dist/index.html');
 const devUrl = !app.isPackaged && process.env.MATRIX_DEV_URL === 'http://127.0.0.1:5173' ? process.env.MATRIX_DEV_URL : undefined;
-function snapshot(): Snapshot { return { ...store.data, game: minecraft.game, java: javaState, operation, community, communityError, server, authCode, error: lastError, update: updates.state, appVersion: app.getVersion(), microsoftConfigured: !!distribution.microsoftClientId }; }
+function snapshot(): Snapshot { return { ...store.data, game: minecraft.game, java: javaState, operation, community, communityError, server, authCode, error: lastError, update: updates.state, appVersion: app.getVersion(), microsoftConfigured: !!distribution.microsoftClientId, matrixAccount: matrixAccount.state(), matrixDrive: matrixDrive.state() }; }
 function emit(): void {
   if (!window || window.isDestroyed() || !updates) return;
   const now = Date.now(); if (now - lastEmit < 150) { pendingEmit ??= setTimeout(() => { pendingEmit = undefined; emit(); }, 150); return; }
@@ -168,6 +174,50 @@ async function handle(command: Command, input: unknown): Promise<unknown> {
     case 'mod.remove': { idle(); const d = commandSchemas['mod.remove'].parse(value); await modCenter.remove(d.instanceId, d.filename); await save(); return; }
     case 'mod.favorite': { const d = commandSchemas['mod.favorite'].parse(value); await modCenter.favorite(d.projectId, d.favorite); emit(); return; }
     case 'mod.favorites': return modCenter.favorites();
+    case 'library.list': return modLibrary.list();
+    case 'library.scan.files': {
+      const result = await dialog.showOpenDialog(window!, { properties: ['openFile', 'multiSelections'], filters: [{ name: 'Mods Java (.jar)', extensions: ['jar'] }] });
+      if (result.canceled || !result.filePaths.length) return;
+      let scan; await run('mods', 'Analisando mods selecionados', async (signal, progress) => { scan = await modLibrary.scanFiles(result.filePaths, (label, done, total) => progress(`Lendo ${label}`, done, total, 0), signal); }); return scan!;
+    }
+    case 'library.scan.folder': {
+      const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] });
+      if (result.canceled || !result.filePaths[0]) return;
+      let scan; await run('mods', 'Procurando mods na pasta selecionada', async (signal, progress) => { scan = await modLibrary.scanFolder(result.filePaths[0], (label, done, total) => progress(`Lendo ${label}`, done, total, 0), signal); }); return scan!;
+    }
+    case 'library.import.commit': {
+      const data = commandSchemas['library.import.commit'].parse(value); let result;
+      await run('mods', 'Salvando mods na biblioteca', async (signal, progress) => { result = await modLibrary.commitImport(data.jobId, data.hashes, signal, (label, done, total) => progress(`Importando ${label}`, done, total, 0)); }); return result!;
+    }
+    case 'library.collection.create': return modLibrary.createCollection(commandSchemas['library.collection.create'].parse(value));
+    case 'library.collection.update': return modLibrary.updateCollection(commandSchemas['library.collection.update'].parse(value));
+    case 'library.collection.delete': return modLibrary.deleteCollection(value as string);
+    case 'library.delete': {
+      idle(); const hash = value as string; const library = await modLibrary.list(); const item = library.mods.find(m => m.hash === hash); if (!item) return;
+      const answer = await dialog.showMessageBox(window!, { type: 'question', buttons: ['Cancelar', 'Excluir da biblioteca'], defaultId: 0, cancelId: 0, message: `Excluir ${item.name} da biblioteca?`, detail: 'A cópia armazenada será removida. Mods já copiados para instâncias permanecem intactos.' });
+      if (answer.response === 1) return modLibrary.remove(hash); return;
+    }
+    case 'library.apply.plan': { const data = commandSchemas['library.apply.plan'].parse(value); return modLibrary.planApply(data.instanceId, data.hashes, data.allowUnknown); }
+    case 'library.apply': {
+      idle();
+      await run('mods', 'Adicionando mods da biblioteca à instância', async (signal, progress) => modLibrary.apply(value as string, signal, (label, bytes, total) => progress(`Copiando ${label}`, bytes, total, 0))); await save(); return;
+    }
+    case 'library.instance.remove': { idle(); const data = commandSchemas['library.instance.remove'].parse(value); await modLibrary.removeFromInstance(data.instanceId, data.hash); await save(); return; }
+    case 'library.save.modrinth': {
+      const data = commandSchemas['library.save.modrinth'].parse(value); const selected = instance(data.instanceId); if (!selected.installed) throw new Error('Instale a instância antes de salvar mods compatíveis.'); let result;
+      await run('mods', 'Salvando versão compatível do Modrinth', async (signal, progress) => { const files = await smart.catalog.resolveProject(data.projectId, selected.minecraft, selected.loader, signal); result = await modLibrary.saveModrinth(files, signal, (label, bytes, total) => progress(`Baixando ${label}`, bytes, total, 0)); }); await save(); return result!;
+    }
+    case 'library.modpack.create': { const data = commandSchemas['library.modpack.create'].parse(value); return modLibrary.createModpack(data); }
+    case 'library.modpack.delete': return modLibrary.deleteModpack(value as string);
+    case 'library.modpack.import': {
+      const result = await dialog.showOpenDialog(window!, { properties: ['openFile'], filters: [{ name: 'Modpacks MATRIX / Modrinth', extensions: ['matrixpack', 'mrpack'] }] }); if (result.canceled || !result.filePaths[0]) return;
+      let pack; await run('mods', 'Importando modpack', async (signal, progress) => { pack = await modLibrary.importModpack(result.filePaths[0], signal, (label, bytes, total) => progress(`Baixando ${label}`, bytes, total, 0)); }); await save(); return pack!;
+    }
+    case 'library.modpack.export': {
+      const data = commandSchemas['library.modpack.export'].parse(value); const pack = (await modLibrary.list()).modpacks.find(item => item.id === data.id); if (!pack) throw new Error('Modpack não encontrado.');
+      const extension = data.format === 'mrpack' ? 'mrpack' : 'matrixpack'; const result = await dialog.showSaveDialog(window!, { defaultPath: `${pack.name.replace(/[\\/:*?"<>|]/g, '_')}.${extension}`, filters: [{ name: data.format === 'mrpack' ? 'Modrinth Modpack' : 'Manifesto MATRIX', extensions: [extension] }] }); if (result.canceled || !result.filePath) return;
+      await modLibrary.exportModpack(data.id, data.format, result.filePath); return;
+    }
     case 'settings': {
       idle(); const settings = commandSchemas.settings.parse(value);
       if (settings.maxMemory * 1024 * 1024 > totalmem() - 1024 * 1024 * 1024) throw new Error('Reserve pelo menos 1 GB de RAM para o sistema operacional');
@@ -185,6 +235,35 @@ async function handle(command: Command, input: unknown): Promise<unknown> {
       if (existing) { const secret = await vault.get(account.id); await vault.set(existing.id, secret!); await vault.remove(account.id); account.id = existing.id; store.data.accounts = store.data.accounts.filter(a => a.id !== existing.id); }
       store.data.accounts.push(account); store.data.selectedAccount = account.id; await save();
     });
+    case 'matrix.auth.google': { let result; await run('auth', 'Aguardando autenticação Google', async signal => { result = await matrixAccount.signIn('google', signal); }); emit(); return result; }
+    case 'matrix.auth.discord': { let result; await run('auth', 'Aguardando autenticação Discord', async signal => { result = await matrixAccount.signIn('discord', signal); }); emit(); return result; }
+    case 'matrix.auth.email.request': await matrixAccount.requestEmailCode((value as { email: string }).email); return;
+    case 'matrix.auth.email.verify': { const result = await matrixAccount.verifyEmailCode((value as { code: string }).code); emit(); return result; }
+    case 'matrix.auth.logout': await matrixAccount.signOut(); emit(); return;
+    case 'matrix.drive.connect': await matrixDrive.connect(); emit(); return;
+    case 'matrix.drive.disconnect': await matrixDrive.disconnect(); emit(); return;
+    case 'matrix.drive.list': return matrixDrive.list();
+    case 'matrix.drive.backup': {
+      idle();
+      const kind = value as 'files' | 'folder';
+      const selected = await dialog.showOpenDialog(window!, { title: kind === 'folder' ? 'Escolha a pasta para o backup' : 'Escolha arquivos para o backup', properties: kind === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections'] });
+      if (selected.canceled || !selected.filePaths.length) throw new Error('Seleção do backup cancelada.');
+      let backup;
+      await run('cloud', 'Preparando backup seguro', async (signal, progress) => { backup = await matrixDrive.createBackup(selected.filePaths, signal, progress); });
+      emit(); return backup!;
+    }
+    case 'matrix.drive.restore': {
+      idle();
+      const selected = await dialog.showOpenDialog(window!, { title: 'Escolha onde criar uma pasta restaurada', properties: ['openDirectory', 'createDirectory'] });
+      if (selected.canceled || !selected.filePaths[0]) throw new Error('Restauração cancelada.');
+      await run('cloud', 'Baixando e verificando backup', async (signal, progress) => matrixDrive.restoreBackup(value as string, selected.filePaths[0]!, signal, progress));
+      emit(); return;
+    }
+    case 'matrix.drive.delete': {
+      const answer = await dialog.showMessageBox(window!, { type: 'warning', buttons: ['Cancelar', 'Excluir backup'], defaultId: 0, cancelId: 0, message: 'Excluir este backup do Google Drive?', detail: 'Esta ação remove apenas o arquivo de backup selecionado na pasta MATRIX.' });
+      if (answer.response !== 1) return;
+      await matrixDrive.deleteBackup(value as string); emit(); return;
+    }
     case 'instance.create': {
       idle(); const data = commandSchemas['instance.create'].parse(value);
       const created = { ...data, id: randomUUID(), installed: false }; store.data.instances.push(created); store.data.selectedInstance = created.id; return save();
@@ -290,13 +369,20 @@ if (!lock) app.quit();
 else {
   app.on('second-instance', () => { window?.restore(); window?.focus(); });
   app.whenReady().then(async () => {
-    const userData = app.getPath('userData'); logs = new Logs(join(userData, 'logs'));
-    store = new Store(join(userData, 'settings.json'), join(userData, 'games')); await store.load();
+    const userData = app.getPath('userData');
+    const dataDirectory = process.platform === 'linux' ? linuxDataDirectory() : userData;
+    const stateDirectory = process.platform === 'linux' ? linuxStateDirectory() : join(userData, 'logs');
+    logs = new Logs(process.platform === 'linux' ? join(stateDirectory, 'logs') : stateDirectory);
+    store = new Store(join(userData, 'settings.json'), join(dataDirectory, 'games')); await store.load();
     if (!store.data.settings.communityApi) store.data.settings.communityApi = distribution.communityApi;
     if (!store.data.settings.discordUrl) store.data.settings.discordUrl = distribution.discordUrl;
     vault = new Vault(join(userData, 'credentials.bin'), safeStorage);
+    matrixAccount = new MatrixAccountService(distribution, vault, url => shell.openExternal(url));
+    matrixDrive = new MatrixDriveService(distribution, vault, url => shell.openExternal(url), app.getPath('temp'), fetch, matrixAccount.configured() ? values => matrixAccount.exchangeDriveToken(values) : undefined);
     setNetworkTransport(nativeHttpsFetch);
     auth = new MicrosoftAuth(distribution.microsoftClientId, vault, new MicrosoftAuthenticator({ fetch: nativeHttpsFetch }), nativeHttpsFetch);
+    await matrixAccount.restore();
+    await matrixDrive.restoreSession();
     minecraft = new Minecraft(emit, message => logs.write(message));
     let loggedUpdateStatus = '';
     updates = new Updates(() => {
@@ -310,14 +396,20 @@ else {
     }
     smart = new SmartInstallService(store, minecraft);
     modCenter = new ModCenterService(store, smart.catalog, async id => (await smart.content(id)), (id, projectId, enabled) => smart.toggleMod(id, projectId, enabled));
-    skins = new SkinLibrary(join(userData, 'skin-studio'));
+    const legacyLibrary = join(userData, 'mod-library');
+    const legacySkins = join(userData, 'skin-studio');
+    const libraryDirectory = process.platform === 'linux' && existsSync(legacyLibrary) ? legacyLibrary : join(dataDirectory, 'mod-library');
+    const skinDirectory = process.platform === 'linux' && existsSync(legacySkins) ? legacySkins : join(dataDirectory, 'skin-studio');
+    modLibrary = new ModLibraryService(libraryDirectory, () => store.data.instances, () => store.data.settings.gameDirectory);
+    smart.setLibraryLookup(file => modLibrary.findContent(file));
+    skins = new SkinLibrary(skinDirectory);
     for (const i of store.data.instances) if (i.smart?.status === 'installing') { i.smart.status = 'interrupted'; i.installed = false; }
     await refreshJava();
     ipcMain.handle('matrix:command', async (event, command: unknown, input: unknown) => {
       const url = event.senderFrame?.url;
       if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || url !== (devUrl ? `${devUrl}/` : pathToFileURL(rendererPath).href)) return { ok: false, error: 'Origem IPC não autorizada' };
       if (typeof command !== 'string' || !Object.hasOwn(commandSchemas, command)) return { ok: false, error: 'Comando desconhecido' };
-      const independent = ['snapshot', 'cancel', 'game.stop', 'server.copy', 'link.open', 'logs.open', 'community.refresh', 'skin.camera', 'skin.list', 'skin.open', 'skin.save', 'skin.draft.get', 'skin.draft.save', 'skin.draft.clear', 'skin.editor.active', 'skin.editor.close'].includes(command);
+      const independent = ['snapshot', 'cancel', 'game.stop', 'server.copy', 'link.open', 'logs.open', 'community.refresh', 'matrix.drive.list', 'skin.camera', 'skin.list', 'skin.open', 'skin.save', 'skin.draft.get', 'skin.draft.save', 'skin.draft.clear', 'skin.editor.active', 'skin.editor.close'].includes(command);
       if (!independent && activeCommand) return { ok: false, error: `Aguarde a operação ${activeCommand}` };
       if (!independent) activeCommand = command;
       try { const value = await handle(command as Command, input); return { ok: true, value }; }

@@ -3,8 +3,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   windows:
+    if: ${{ !startsWith(github.ref, 'refs/heads/build/linux-') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,3 +25,31 @@ jobs:
             release/*.exe
             release/*.blockmap
           if-no-files-found: error
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Linux packaging tools
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y rpm desktop-file-utils libopenjp2-tools
+      - run: npm ci
+      - name: Validate Linux starter syntax
+        run: bash -n INICIAR-LINUX.sh
+      - run: npm test
+      - run: npm run dist:linux
+      - name: Validate Linux packages
+        run: bash scripts/validate-linux-packages.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matrix-launcher-linux-x86_64
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/SHA256SUMS.txt
+            release/LEIA-ME-LINUX.md
+          if-no-files-found: error
+          retention-days: 14

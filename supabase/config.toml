@@ -1,0 +1,2 @@
+[functions.matrix-drive-token]
+verify_jwt = true

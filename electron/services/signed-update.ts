@@ -23,6 +23,7 @@ export interface SignedFeedOptions {
   repo: string;
   channel: FeedChannel;
   publicKey: string;
+  platform: 'windows' | 'linux';
 }
 function isDirectReleaseAsset(target: URL, directory: URL): boolean {
   if (target.origin !== directory.origin || !target.pathname.startsWith(directory.pathname)) return false;
@@ -40,10 +41,11 @@ export function verifySignedManifest(raw: string, signatureText: string, publicK
   catch { return false; }
 }
 
-export function validateManifestInfo(info: Pick<UpdateInfo, 'version' | 'files'>, tag: string, assetDirectory: URL): void {
+export function validateManifestInfo(info: Pick<UpdateInfo, 'version' | 'files'>, tag: string, assetDirectory: URL, platform: 'windows' | 'linux' = 'windows'): void {
   if (!info.version || tag !== `v${info.version}` || !Array.isArray(info.files) || info.files.length === 0) throw new Error('Manifesto assinado não corresponde à versão da release');
+  const extensions = platform === 'linux' ? ['.appimage', '.deb', '.rpm'] : ['.exe'];
   for (const file of info.files) {
-    if (typeof file.url !== 'string' || basename(file.url) !== file.url || file.url === '.' || file.url === '..' || file.url.includes('\\') || !file.url.toLowerCase().endsWith('.exe') || !/^[A-Za-z0-9_. -]+$/.test(file.url)) throw new Error('Manifesto contém um caminho de arquivo inválido');
+    if (typeof file.url !== 'string' || basename(file.url) !== file.url || file.url === '.' || file.url === '..' || file.url.includes('\\') || !extensions.some(extension => file.url.toLowerCase().endsWith(extension)) || !/^[A-Za-z0-9_. -]+$/.test(file.url)) throw new Error('Manifesto contém um caminho de arquivo inválido');
     if (typeof file.sha512 !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(file.sha512) || typeof file.size !== 'number' || !Number.isSafeInteger(file.size) || file.size <= 0) throw new Error('Manifesto contém hash ou tamanho inválido');
     const target = new URL(file.url, assetDirectory);
     if (!isDirectReleaseAsset(target, assetDirectory)) throw new Error('Arquivo de atualização fora da release validada');
@@ -82,7 +84,7 @@ export class GitHubSignedManifestProvider extends Provider<UpdateInfo> {
 
   async getLatestVersion(): Promise<UpdateInfo> {
     const release = await this.findRelease();
-    const channelFile = this.config.channel === 'stable' ? 'latest.yml' : 'beta.yml';
+    const channelFile = this.config.platform === 'linux' ? (this.config.channel === 'stable' ? 'latest-linux.yml' : 'beta-linux.yml') : (this.config.channel === 'stable' ? 'latest.yml' : 'beta.yml');
     const manifestAsset = release.assets.find(asset => asset.name === channelFile);
     const signatureAsset = release.assets.find(asset => asset.name === `${channelFile}.sig`);
     if (!manifestAsset || !signatureAsset) throw new Error('Release não contém o manifesto assinado e sua assinatura');
@@ -95,7 +97,7 @@ export class GitHubSignedManifestProvider extends Provider<UpdateInfo> {
     if (!manifest || !signature || Buffer.byteLength(signature) > MAX_SIGNATURE_BYTES || !verifySignedManifest(manifest, signature, this.config.publicKey)) throw new Error('Assinatura Ed25519 do manifesto inválida; atualização recusada');
     const info = parseUpdateInfo(manifest, channelFile, manifestUrl) as UpdateInfo;
     this.assetDirectory = new URL('.', manifestUrl);
-    validateManifestInfo(info, release.tag_name, this.assetDirectory);
+    validateManifestInfo(info, release.tag_name, this.assetDirectory, this.config.platform);
     return { ...info, releaseDate: release.published_at, releaseNotes: release.body?.slice(0, 12000) };
   }
 

@@ -15,7 +15,9 @@ export class Updates {
 
   constructor(private changed: () => void) {
     // Fail closed unless this build ships a pinned Ed25519 key and a public update destination.
-    if (!app.isPackaged || process.platform !== 'win32' || !existsSync(join(process.resourcesPath, 'app-update.yml')) || !distribution.githubOwner || !distribution.githubRepo || !distribution.updateManifestPublicKey) return;
+    const appImage = process.platform === 'linux' && !!process.env.APPIMAGE;
+    if (process.platform === 'linux' && !appImage) this.state = { status: 'disabled', message: 'Atualizações automáticas estão disponíveis apenas na versão AppImage. Atualize pacotes DEB/RPM pelo método de instalação da sua distribuição.' };
+    if (!app.isPackaged || (process.platform !== 'win32' && !appImage) || !existsSync(join(process.resourcesPath, 'app-update.yml')) || !distribution.githubOwner || !distribution.githubRepo || !distribution.updateManifestPublicKey) return;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.allowDowngrade = false;
@@ -51,6 +53,7 @@ export class Updates {
       provider: 'custom', url: 'https://github.com', channel,
       owner: distribution.githubOwner, repo: distribution.githubRepo,
       publicKey: distribution.updateManifestPublicKey,
+      platform: process.platform === 'linux' ? 'linux' : 'windows',
       updateProvider: GitHubSignedManifestProvider,
     } as never);
     autoUpdater.channel = channel === 'stable' ? 'latest' : 'beta';
